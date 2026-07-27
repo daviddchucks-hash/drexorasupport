@@ -1,0 +1,184 @@
+/**
+ * chats.js — ES6 Module
+ * View conversations collected via the widget.
+ */
+
+import { requireAuth, setupSidebar, toast, formatDate, timeAgo, escHtml } from './app.js';
+
+/* ── State ─────────────────────────────────────────────────── */
+let currentUser    = null;
+let allChats       = [];
+let selectedChatId = null;
+
+/* ── DOM refs ──────────────────────────────────────────────── */
+const chatList    = document.getElementById('chat-list');
+const chatDetail  = document.getElementById('chat-detail');
+const chatSearch  = document.getElementById('chat-search');
+const chatCount   = document.getElementById('chat-count');
+
+/* ── Init ──────────────────────────────────────────────────── */
+requireAuth(user => {
+  currentUser = user;
+  setupSidebar(user);
+  loadChats(user.uid);
+  bindEvents();
+});
+
+/* ── Load chats ────────────────────────────────────────────── */
+function loadChats(uid) {
+  const db = firebase.database();
+  db.ref(`businesses/${uid}/chats`).on('value', snap => {
+    const raw = snap.val() || {};
+    allChats = Object.entries(raw).map(([id, data]) => ({ id, ...data }))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    if (chatCount) chatCount.textContent = allChats.length;
+    renderChatList();
+
+    // Re-render open chat if it was updated
+    if (selectedChatId) renderChatDetail(selectedChatId);
+  });
+}
+
+/* ── Render left panel (chat list) ────────────────────────── */
+function renderChatList() {
+  const query = (chatSearch?.value || '').toLowerCase();
+
+  const filtered = allChats.filter(chat => {
+    if (!query) return true;
+    const msgs = chat.messages ? Object.values(chat.messages) : [];
+    return msgs.some(m => (m.text || '').toLowerCase().includes(query)) ||
+           (chat.visitorId || '').toLowerCase().includes(query);
+  });
+
+  if (!filtered.length) {
+    chatList.innerHTML = `
+      <div class="empty-state" style="padding:40px 20px">
+        <div class="empty-state-icon">💬</div>
+        <div class="empty-state-title">${query ? 'No matching chats' : 'No conversations yet'}</div>
+        <div class="empty-state-desc" style="font-size:.75rem">Conversations will appear here when visitors interact with your widget.</div>
+      </div>`;
+    return;
+  }
+
+  chatList.innerHTML = filtered.map(chat => {
+    const msgs    = chat.messages ? Object.values(chat.messages) : [];
+    const lastMsg = msgs[msgs.length - 1];
+    const preview = lastMsg ? (lastMsg.text || '').slice(0, 60) : 'No messages';
+    const isSelected = chat.id === selectedChatId;
+
+    return `
+      <div class="chat-list-item ${isSelected ? 'selected' : ''}" data-chat-id="${escHtml(chat.id)}"
+           style="padding:14px 16px;border-bottom:1px solid var(--glass-border);cursor:pointer;
+                  transition:all .2s;background:${isSelected ? 'rgba(124,58,237,.1)' : 'transparent'}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:.8rem;font-weight:600">
+            Visitor ${escHtml((chat.visitorId || 'Unknown').slice(-6))}
+          </span>
+          <span style="font-size:.7rem;color:var(--text-muted)">${timeAgo(chat.createdAt)}</span>
+        </div>
+        <div style="font-size:.78rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${escHtml(preview)}
+        </div>
+        <div style="margin-top:6px;display:flex;gap:6px">
+          <span class="badge badge-${chat.status === 'open' ? 'success' : 'muted'}" style="font-size:.65rem">
+            ${chat.status || 'open'}
+          </span>
+          <span class="badge badge-muted" style="font-size:.65rem">${msgs.length} msg${msgs.length !== 1 ? 's' : ''}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  chatList.querySelectorAll('[data-chat-id]').forEach(el => {
+    el.addEventListener('click', () => {
+      selectedChatId = el.dataset.chatId;
+      renderChatList();
+      renderChatDetail(selectedChatId);
+    });
+    el.addEventListener('mouseenter', () => { if (el.dataset.chatId !== selectedChatId) el.style.background = 'rgba(255,255,255,.03)'; });
+    el.addEventListener('mouseleave', () => { if (el.dataset.chatId !== selectedChatId) el.style.background = 'transparent'; });
+  });
+}
+
+/* ── Render right panel (chat detail) ─────────────────────── */
+function renderChatDetail(chatId) {
+  const chat = allChats.find(c => c.id === chatId);
+
+  if (!chat) {
+    chatDetail.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">💬</div>
+        <div class="empty-state-title">Select a conversation</div>
+        <div class="empty-state-desc">Choose a chat from the left to view the full conversation.</div>
+      </div>`;
+    return;
+  }
+
+  const msgs    = chat.messages ? Object.values(chat.messages).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)) : [];
+  const started = chat.createdAt ? new Date(chat.createdAt).toLocaleString() : 'Unknown time';
+
+  chatDetail.innerHTML = `
+    <div style="padding:20px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:.9rem;font-weight:700">Visitor ${escHtml((chat.visitorId || 'Unknown').slice(-6))}</div>
+        <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">Started ${started}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="badge badge-${chat.status === 'open' ? 'success' : 'muted'}">${chat.status || 'open'}</span>
+        ${chat.status === 'open'
+          ? `<button class="btn btn-ghost btn-sm" data-close-chat="${escHtml(chatId)}">Close chat</button>`
+          : ''}
+        <button class="btn btn-danger btn-sm" data-delete-chat="${escHtml(chatId)}">🗑 Delete</button>
+      </div>
+    </div>
+    <div class="chat-messages" id="messages-area">
+      ${msgs.length ? msgs.map(msg => `
+        <div class="msg ${msg.role === 'user' ? 'visitor' : 'bot'}">
+          <div class="msg-bubble">${escHtml(msg.text || '')}</div>
+          <div class="msg-time">${msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+        </div>
+      `).join('') : '<div class="empty-state"><div class="empty-state-desc">No messages in this chat.</div></div>'}
+    </div>`;
+
+  // Bind chat actions
+  const closeBtn = chatDetail.querySelector('[data-close-chat]');
+  closeBtn?.addEventListener('click', () => updateChatStatus(chatId, 'closed'));
+
+  const deleteBtn = chatDetail.querySelector('[data-delete-chat]');
+  deleteBtn?.addEventListener('click', () => deleteChat(chatId));
+
+  // Scroll to bottom
+  const area = document.getElementById('messages-area');
+  if (area) area.scrollTop = area.scrollHeight;
+}
+
+/* ── Actions ───────────────────────────────────────────────── */
+async function updateChatStatus(id, status) {
+  const db = firebase.database();
+  try {
+    await db.ref(`businesses/${currentUser.uid}/chats/${id}`).update({ status });
+    toast(`Chat marked as ${status}.`, 'success');
+  } catch (err) {
+    toast('Could not update chat status.', 'error');
+  }
+}
+
+async function deleteChat(id) {
+  if (!confirm('Delete this conversation? This cannot be undone.')) return;
+  const db = firebase.database();
+  try {
+    await db.ref(`businesses/${currentUser.uid}/chats/${id}`).remove();
+    if (selectedChatId === id) {
+      selectedChatId = null;
+      chatDetail.innerHTML = `<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-title">Select a conversation</div></div>`;
+    }
+    toast('Conversation deleted.', 'success');
+  } catch (err) {
+    toast('Failed to delete conversation.', 'error');
+  }
+}
+
+/* ── Bind events ───────────────────────────────────────────── */
+function bindEvents() {
+  chatSearch?.addEventListener('input', renderChatList);
+}

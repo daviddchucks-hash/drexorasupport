@@ -1,27 +1,603 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Drexora Support</title>
   <style>
-    :root{--primary:#9e92ec;--ink:#29253e;--paper:#fbf9f3}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:transparent;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,sans-serif}#app{position:fixed;right:0;bottom:0;width:min(370px,calc(100vw - 24px))}button,input{font:inherit}.launcher{display:grid;place-items:center;width:58px;height:58px;margin:0 0 10px auto;border:0;border-radius:19px;background:var(--ink);color:#fff;box-shadow:0 14px 32px rgba(41,37,62,.28);cursor:pointer}.panel{overflow:hidden;margin-bottom:10px;border:1px solid rgba(41,37,62,.13);border-radius:24px;background:var(--paper);box-shadow:0 20px 60px rgba(41,37,62,.22)}.header{display:flex;align-items:center;gap:12px;padding:18px;background:var(--primary)}.avatar{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--ink);color:white;font-size:12px;font-weight:800}.heading{font-size:14px;font-weight:800}.subheading{margin-top:3px;color:rgba(41,37,62,.65);font-size:10px}.close{margin-left:auto;border:0;background:transparent;color:var(--ink);font-size:22px;cursor:pointer}.messages{display:grid;gap:10px;max-height:360px;overflow:auto;padding:16px}.bubble{max-width:85%;padding:11px 13px;border-radius:15px;font-size:12px;line-height:1.55}.bot{border-top-left-radius:5px;background:#ebe7f5}.user{margin-left:auto;border-top-right-radius:5px;background:var(--ink);color:white}.choices{display:grid;gap:8px;padding:0 16px 16px}.choice{padding:11px 12px;border:1px solid #ddd8cf;border-radius:12px;background:white;color:var(--ink);text-align:left;font-size:12px;cursor:pointer}.lead-form{display:grid;gap:8px;padding:0 16px 16px}.lead-form input{width:100%;padding:11px 12px;border:1px solid #ddd8cf;border-radius:11px;outline:0;font-size:12px}.lead-form button{padding:11px 12px;border:0;border-radius:11px;background:var(--ink);color:white;font-size:12px;font-weight:700;cursor:pointer}.footer{padding:11px;border-top:1px solid #e8e3da;color:#9b969e;text-align:center;font-size:9px}@media(max-width:460px){#app{right:12px;width:calc(100vw - 24px)}}
+    /* ── Reset ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: transparent; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      color: #1a1a2e;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; cursor: pointer; border: none; }
+
+    /* ── CSS variables (overridden by JS from business theme) ── */
+    :root {
+      --primary:   #7c3aed;
+      --primary-l: #a78bfa;
+      --ink:       #1a1a2e;
+      --paper:     #f8f7ff;
+      --muted:     #6b7280;
+      --border:    #e5e7eb;
+    }
+
+    /* ── Widget root — fixed to bottom-right of iframe ──────── */
+    #app {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      width: min(370px, 100vw);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    /* ── Launcher button ────────────────────────────────────── */
+    .launcher {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 58px;
+      height: 58px;
+      margin-bottom: 12px;
+      border-radius: 18px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 22px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.28);
+      transition: transform .2s ease, box-shadow .2s ease;
+      flex-shrink: 0;
+    }
+    .launcher:hover {
+      transform: translateY(-2px) scale(1.04);
+      box-shadow: 0 12px 36px rgba(0,0,0,.32);
+    }
+    .launcher:active { transform: scale(.97); }
+
+    /* ── Chat panel ─────────────────────────────────────────── */
+    .panel {
+      width: 100%;
+      border-radius: 18px 18px 0 0;
+      background: var(--paper);
+      box-shadow: 0 -4px 32px rgba(0,0,0,.12), 0 20px 60px rgba(0,0,0,.25);
+      overflow: hidden;
+      animation: riseIn .28s cubic-bezier(.22,.68,0,1.2) both;
+    }
+    @keyframes riseIn {
+      from { opacity: 0; transform: translateY(20px) scale(.97); }
+      to   { opacity: 1; transform: translateY(0)   scale(1); }
+    }
+
+    /* Panel header */
+    .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 18px;
+      background: var(--primary);
+      color: #fff;
+    }
+    .logo-wrap {
+      width: 40px; height: 40px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.2);
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      font-weight: 800;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    .header-text { flex: 1; }
+    .header-title { font-size: 14px; font-weight: 700; }
+    .header-status { font-size: 11px; opacity: .8; margin-top: 1px; }
+    .header-close {
+      background: rgba(255,255,255,.15);
+      border-radius: 8px;
+      color: #fff;
+      width: 30px; height: 30px;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      transition: background .15s;
+    }
+    .header-close:hover { background: rgba(255,255,255,.25); }
+
+    /* Messages area */
+    .messages {
+      max-height: 340px;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scroll-behavior: smooth;
+    }
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+
+    /* Chat bubbles */
+    .bubble {
+      max-width: 82%;
+      padding: 10px 13px;
+      border-radius: 14px;
+      font-size: 13px;
+      line-height: 1.55;
+      animation: bubbleIn .2s ease both;
+    }
+    @keyframes bubbleIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .bubble.bot {
+      align-self: flex-start;
+      background: #ede9fe;
+      color: var(--ink);
+      border-top-left-radius: 4px;
+    }
+    .bubble.user {
+      align-self: flex-end;
+      background: var(--primary);
+      color: #fff;
+      border-top-right-radius: 4px;
+    }
+    .bubble.system {
+      align-self: center;
+      background: #f3f4f6;
+      color: var(--muted);
+      font-size: 11px;
+      padding: 6px 12px;
+    }
+
+    /* Typing indicator */
+    .typing {
+      align-self: flex-start;
+      display: flex;
+      gap: 4px;
+      padding: 12px 14px;
+      background: #ede9fe;
+      border-radius: 14px;
+      border-top-left-radius: 4px;
+    }
+    .typing span {
+      width: 7px; height: 7px;
+      background: var(--primary);
+      border-radius: 50%;
+      animation: bounce .8s ease infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: .15s; }
+    .typing span:nth-child(3) { animation-delay: .30s; }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); opacity: .5; }
+      50%       { transform: translateY(-5px); opacity: 1; }
+    }
+
+    /* Quick-reply chips */
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 0 16px 12px;
+    }
+    .chip {
+      padding: 8px 13px;
+      border: 1.5px solid var(--primary-l);
+      border-radius: 99px;
+      background: #fff;
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 600;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .chip:hover {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    /* Input row */
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      background: #fff;
+    }
+    .chat-input {
+      flex: 1;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 13px;
+      color: var(--ink);
+      outline: none;
+      transition: border-color .15s;
+      background: #fafafa;
+    }
+    .chat-input:focus { border-color: var(--primary-l); background: #fff; }
+    .chat-input::placeholder { color: #9ca3af; }
+    .send-btn {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      background: var(--primary);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      font-size: 16px;
+      transition: opacity .15s;
+    }
+    .send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* Lead capture form */
+    .lead-form {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px 16px 16px;
+      animation: riseIn .2s ease both;
+    }
+    .lead-input {
+      width: 100%;
+      border: 1.5px solid var(--border);
+      border-radius: 9px;
+      padding: 9px 12px;
+      font-size: 13px;
+      color: var(--ink);
+      background: #fafafa;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .lead-input:focus { border-color: var(--primary-l); background: #fff; }
+    .lead-input::placeholder { color: #9ca3af; }
+    .lead-submit {
+      padding: 10px;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 700;
+      transition: opacity .15s;
+    }
+    .lead-submit:hover { opacity: .9; }
+
+    /* Panel footer */
+    .panel-footer {
+      padding: 8px 14px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .panel-footer a { color: var(--muted); text-decoration: none; }
   </style>
 </head>
 <body>
   <div id="app"></div>
+
+  <!-- Firebase CDN — Realtime Database (no Firestore) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
   <script>
-  (function(){
-    var config={apiKey:'AIzaSyA1wX_0tastbk_hWfI0_cvuV9ZzoIKitL4',authDomain:'drexorasupport.firebaseapp.com',projectId:'drexorasupport',storageBucket:'drexorasupport.firebasestorage.app',messagingSenderId:'669148105903',appId:'1:669148105903:web:69641657318107bf1a185a'};
-    var businessId=new URLSearchParams(location.search).get('business'),state={open:false,settings:{primaryColor:'#9e92ec',chatTitle:'Nova from Drexora',welcomeMessage:'Hi there. I can help with orders, plans, or finding the right fit.'},faqs:[],messages:[]},root=document.getElementById('app');
-    try{firebase.initializeApp(config);var db=firebase.firestore();db.collection('Settings').doc(businessId).get().then(function(s){if(s.exists)state.settings=Object.assign(state.settings,s.data());return db.collection('FAQs').where('businessId','==',businessId).get()}).then(function(s){if(s)state.faqs=s.docs.map(function(d){return d.data()});render()}).catch(render)}catch(e){render()}
-    function msg(){parent.postMessage({type:'drexora-widget-resize',open:state.open},'*')}
-    function answer(q){state.messages.push({role:'user',text:q});var n=q.toLowerCase(),m=state.faqs.find(function(f){return n.includes(String(f.question||'').toLowerCase().split(' ').slice(0,3).join(' '))});state.messages.push(m?{role:'bot',text:m.answer}:{role:'bot',text:'I couldn’t find that information. Please leave your name, email and phone number and our team will contact you.',lead:true});render()}
-    function lead(e){e.preventDefault();var f=e.target;firebase.firestore().collection('Leads').add({businessId:businessId,name:f.name.value,email:f.email.value,phone:f.phone.value,source:'widget',createdAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){});state.messages.push({role:'bot',text:'Thanks — your details are with the team. Someone will be in touch soon.'});render()}
-    function esc(v){return String(v||'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c]})}
-    function render(){document.documentElement.style.setProperty('--primary',state.settings.primaryColor||'#9e92ec');root.innerHTML=state.open?'<div class="panel"><div class="header"><span class="avatar">dx</span><div><div class="heading">'+esc(state.settings.chatTitle)+'</div><div class="subheading">Usually replies instantly</div></div><button class="close" id="close">×</button></div><div class="messages"><div class="bubble bot">'+esc(state.settings.welcomeMessage)+'</div>'+state.messages.map(function(m){return '<div class="bubble '+m.role+'">'+esc(m.text)+'</div>'+(m.lead?'<form class="lead-form" id="lead-form"><input name="name" required placeholder="Your name"><input name="email" type="email" required placeholder="Email address"><input name="phone" placeholder="Phone number"><button>Send details</button></form>':'')}).join('')+'</div><div class="choices"><button class="choice" data-q="Tell me about plans">Tell me about plans</button><button class="choice" data-q="Where is my order?">Where is my order?</button></div><div class="footer">Powered by Drexora Support</div></div>':'';root.innerHTML+='<button class="launcher" id="launcher">'+(state.open?'×':'✦')+'</button>';document.getElementById('launcher').onclick=function(){state.open=!state.open;msg();render()};if(state.open){document.getElementById('close').onclick=function(){state.open=false;msg();render()};Array.prototype.forEach.call(document.querySelectorAll('[data-q]'),function(b){b.onclick=function(){answer(b.getAttribute('data-q'))}});var f=document.getElementById('lead-form');if(f)f.onsubmit=lead}msg()}
+  (function () {
+    'use strict';
+
+    /* ── Firebase config ──────────────────────────────────── */
+    var FIREBASE_CONFIG = {
+      apiKey:            'AIzaSyA1wX_0tastbk_hWfI0_cvuV9ZzoIKitL4',
+      authDomain:        'drexorasupport.firebaseapp.com',
+      projectId:         'drexorasupport',
+      storageBucket:     'drexorasupport.firebasestorage.app',
+      messagingSenderId: '669148105903',
+      appId:             '1:669148105903:web:69641657318107bf1a185a',
+      databaseURL:       'https://drexorasupport-default-rtdb.firebaseio.com'
+    };
+
+    /* ── Parse business ID from URL ────────────────────────── */
+    var businessId = new URLSearchParams(window.location.search).get('business');
+    if (!businessId) { console.warn('[Drexora] No business ID.'); return; }
+
+    /* ── Widget state ──────────────────────────────────────── */
+    var state = {
+      open:       false,
+      loading:    true,
+      profile:    { name: 'Support', welcomeMessage: 'Hi! How can we help you today?', themeColor: '#7c3aed', chatTitle: '', logoUrl: '' },
+      faqs:       [],       // [{ question, answer }]
+      messages:   [],       // [{ role: 'bot'|'user', text, id }]
+      showLeadForm: false,
+      leadSaved:  false,
+      visitorId:  null,
+      chatId:     null,
+      msgCounter: 0
+    };
+
+    /* ── Visitor session ID ─────────────────────────────────── */
+    state.visitorId = sessionStorage.getItem('drx_vid') || null;
+    if (!state.visitorId) {
+      state.visitorId = 'v_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      sessionStorage.setItem('drx_vid', state.visitorId);
+    }
+
+    /* ── Init Firebase ──────────────────────────────────────── */
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    var db = firebase.database();
+
+    /* ── Load business data from Realtime DB ────────────────── */
+    db.ref('businesses/' + businessId + '/profile').once('value').then(function (snap) {
+      if (snap.exists()) {
+        var p = snap.val();
+        state.profile.name           = p.name           || state.profile.name;
+        state.profile.welcomeMessage = p.welcomeMessage || state.profile.welcomeMessage;
+        state.profile.themeColor     = p.themeColor     || state.profile.themeColor;
+        state.profile.chatTitle      = p.chatTitle      || '';
+        state.profile.logoUrl        = p.logoUrl        || '';
+      }
+      return db.ref('businesses/' + businessId + '/faqs').once('value');
+    }).then(function (snap) {
+      if (snap.exists()) {
+        snap.forEach(function (child) {
+          var faq = child.val();
+          if (faq.question && faq.answer) state.faqs.push({ question: faq.question, answer: faq.answer });
+        });
+      }
+      state.loading = false;
+      render();
+    }).catch(function (err) {
+      console.error('[Drexora] Load error:', err);
+      state.loading = false;
+      render();
+    });
+
+    /* ── Render ──────────────────────────────────────────────── */
+    var root = document.getElementById('app');
+
+    function render() {
+      /* Apply theme colour */
+      var c = state.profile.themeColor || '#7c3aed';
+      document.documentElement.style.setProperty('--primary', c);
+      document.documentElement.style.setProperty('--primary-l', lighten(c));
+
+      if (!state.open) {
+        root.innerHTML = launcherHtml();
+        document.getElementById('btn-launcher').onclick = openWidget;
+        notify(false);
+        return;
+      }
+
+      notify(true);
+      root.innerHTML = panelHtml();
+
+      /* Bind panel events */
+      document.getElementById('btn-close').onclick = closeWidget;
+
+      var chatInput = document.getElementById('chat-input');
+      var sendBtn   = document.getElementById('btn-send');
+
+      if (chatInput && sendBtn) {
+        sendBtn.onclick = function () { sendMessage(chatInput.value); };
+        chatInput.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(chatInput.value); } };
+      }
+
+      /* Quick-reply chips */
+      document.querySelectorAll('[data-chip]').forEach(function (btn) {
+        btn.onclick = function () { sendMessage(btn.getAttribute('data-chip')); };
+      });
+
+      /* Lead form */
+      var leadForm = document.getElementById('lead-form');
+      if (leadForm) leadForm.onsubmit = submitLead;
+
+      /* Scroll messages to bottom */
+      var msgArea = document.getElementById('msg-area');
+      if (msgArea) msgArea.scrollTop = msgArea.scrollHeight;
+    }
+
+    /* ── Launcher HTML ───────────────────────────────────────── */
+    function launcherHtml() {
+      return '<button id="btn-launcher" class="launcher" aria-label="Open support chat">💬</button>';
+    }
+
+    /* ── Full panel HTML ─────────────────────────────────────── */
+    function panelHtml() {
+      var title  = esc(state.profile.chatTitle || state.profile.name || 'Support');
+      var logoEl = state.profile.logoUrl
+        ? '<div class="logo-wrap"><img src="' + esc(state.profile.logoUrl) + '" alt="logo"></div>'
+        : '<div class="logo-wrap">' + esc((state.profile.name || 'S').slice(0, 2).toUpperCase()) + '</div>';
+
+      /* Build messages HTML */
+      var msgsHtml = state.messages.map(function (m) {
+        return '<div class="bubble ' + m.role + '">' + esc(m.text) + '</div>';
+      }).join('');
+
+      if (state.loading) {
+        msgsHtml = '<div class="typing"><span></span><span></span><span></span></div>';
+      }
+
+      /* Welcome bubble (always first) */
+      var welcomeHtml = '<div class="bubble bot">' + esc(state.profile.welcomeMessage) + '</div>';
+
+      /* Quick-reply chips (shown when no conversation yet) */
+      var chipsHtml = '';
+      if (!state.messages.length && !state.loading) {
+        var presets = ['How can you help me?', 'What are your prices?', 'I have an issue'];
+        chipsHtml = '<div class="chips">' +
+          presets.map(function (p) {
+            return '<button class="chip" data-chip="' + esc(p) + '">' + esc(p) + '</button>';
+          }).join('') + '</div>';
+      }
+
+      /* Lead form or chat input */
+      var inputHtml;
+      if (state.showLeadForm && !state.leadSaved) {
+        inputHtml = '<form id="lead-form" class="lead-form">' +
+          '<input class="lead-input" name="visitorName" required placeholder="Your name">' +
+          '<input class="lead-input" name="email"       type="email" required placeholder="Email address">' +
+          '<input class="lead-input" name="phone"       placeholder="Phone number (optional)">' +
+          '<button type="submit" class="lead-submit">Send my details →</button>' +
+          '</form>';
+      } else {
+        inputHtml = '<div class="input-row">' +
+          '<input id="chat-input" class="chat-input" type="text" placeholder="Type a message…" autocomplete="off" ' +
+          (state.leadSaved ? 'disabled' : '') + '>' +
+          '<button id="btn-send" class="send-btn" ' + (state.leadSaved ? 'disabled' : '') + '>➤</button>' +
+          '</div>';
+      }
+
+      return '<div class="panel">' +
+        '<div class="panel-header">' + logoEl +
+        '<div class="header-text"><div class="header-title">' + title + '</div>' +
+        '<div class="header-status">✅ Online · Usually replies instantly</div></div>' +
+        '<button id="btn-close" class="header-close" aria-label="Close">×</button>' +
+        '</div>' +
+        '<div class="messages" id="msg-area">' + welcomeHtml + msgsHtml + '</div>' +
+        chipsHtml + inputHtml +
+        '<div class="panel-footer">Powered by <a href="https://daviddchucks-hash.github.io/drexorasupport/" target="_blank">Drexora Support</a></div>' +
+        '</div>' +
+        '<button id="btn-launcher" class="launcher" style="margin-top:10px" aria-label="Close support chat" onclick="closeWidget()">×</button>';
+    }
+
+    /* ── Handle a sent message ───────────────────────────────── */
+    function sendMessage(text) {
+      text = (text || '').trim();
+      if (!text) return;
+
+      var input = document.getElementById('chat-input');
+      if (input) input.value = '';
+
+      state.messages.push({ role: 'user', text: text, id: ++state.msgCounter });
+      state.messages.push({ role: 'bot',  text: '…typing', id: ++state.msgCounter, typing: true });
+      render();
+
+      /* Small artificial delay for a natural feel */
+      setTimeout(function () {
+        /* Remove typing indicator */
+        state.messages = state.messages.filter(function (m) { return !m.typing; });
+
+        /* Search FAQs */
+        var norm  = text.toLowerCase();
+        var match = null;
+        for (var i = 0; i < state.faqs.length; i++) {
+          var q     = (state.faqs[i].question || '').toLowerCase();
+          var words = q.split(/\s+/).slice(0, 4);
+          var hits  = words.filter(function (w) { return w.length > 2 && norm.includes(w); });
+          if (hits.length >= Math.min(2, words.length)) { match = state.faqs[i]; break; }
+        }
+
+        if (match) {
+          /* FAQ answer found */
+          state.messages.push({ role: 'bot', text: match.answer, id: ++state.msgCounter });
+          saveChat(text, match.answer);
+        } else {
+          /* No match — ask for contact details */
+          state.messages.push({
+            role: 'bot',
+            text: "I couldn't find that information in our knowledge base. Please leave your name, email and phone number and our team will contact you shortly.",
+            id: ++state.msgCounter
+          });
+          state.showLeadForm = true;
+          saveChat(text, "I couldn't find that information.");
+        }
+        render();
+      }, 900);
+    }
+
+    /* ── Save chat to Realtime DB ────────────────────────────── */
+    function saveChat(userMsg, botMsg) {
+      try {
+        if (!state.chatId) {
+          var chatRef = db.ref('businesses/' + businessId + '/chats').push();
+          state.chatId = chatRef.key;
+          chatRef.set({ visitorId: state.visitorId, createdAt: firebase.database.ServerValue.TIMESTAMP, status: 'open' });
+        }
+        var msgsRef = db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages');
+        msgsRef.push({ role: 'user', text: userMsg, timestamp: firebase.database.ServerValue.TIMESTAMP });
+        msgsRef.push({ role: 'bot',  text: botMsg,  timestamp: firebase.database.ServerValue.TIMESTAMP });
+      } catch (e) { /* silent — don't break the widget */ }
+    }
+
+    /* ── Submit lead form ────────────────────────────────────── */
+    function submitLead(e) {
+      e.preventDefault();
+      var form        = e.target;
+      var visitorName = (form.visitorName.value || '').trim();
+      var email       = (form.email.value       || '').trim();
+      var phone       = (form.phone.value        || '').trim();
+
+      if (!visitorName || !email) return;
+
+      var lastUserMsg = '';
+      for (var i = state.messages.length - 1; i >= 0; i--) {
+        if (state.messages[i].role === 'user') { lastUserMsg = state.messages[i].text; break; }
+      }
+
+      /* Write lead to Realtime DB */
+      try {
+        db.ref('businesses/' + businessId + '/leads').push({
+          visitorName: visitorName,
+          email:       email,
+          phone:       phone,
+          message:     lastUserMsg,
+          visitorId:   state.visitorId,
+          read:        false,
+          source:      'widget',
+          createdAt:   firebase.database.ServerValue.TIMESTAMP
+        });
+      } catch (err) { /* silent */ }
+
+      state.showLeadForm = false;
+      state.leadSaved    = true;
+      state.messages.push({
+        role: 'bot',
+        text: 'Thanks, ' + visitorName + '! Your details have been passed to our team. Someone will be in touch soon.',
+        id: ++state.msgCounter
+      });
+      render();
+    }
+
+    /* ── Open / close ────────────────────────────────────────── */
+    function openWidget()  { state.open = true;  render(); }
+    function closeWidget() { state.open = false; render(); }
+
+    /* Expose closeWidget for the inline onclick in panelHtml */
+    window.closeWidget = closeWidget;
+
+    /* ── postMessage parent with new height ──────────────────── */
+    function notify(open) {
+      try {
+        window.parent.postMessage({ type: 'drexora-resize', open: open }, '*');
+      } catch (e) {}
+    }
+
+    /* ── Helpers ─────────────────────────────────────────────── */
+    function esc(str) {
+      return String(str || '').replace(/[&<>"']/g, function (c) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[c];
+      });
+    }
+
+    /* Very simple hex colour lightener for --primary-l */
+    function lighten(hex) {
+      try {
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        r = Math.min(255, r + 60); g = Math.min(255, g + 60); b = Math.min(255, b + 60);
+        return '#' + [r,g,b].map(function (v) { return v.toString(16).padStart(2,'0'); }).join('');
+      } catch (e) { return '#a78bfa'; }
+    }
+
+    /* ── Initial render ──────────────────────────────────────── */
+    render();
+
   }());
   </script>
 </body>
