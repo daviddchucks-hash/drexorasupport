@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsBusiness(businessId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/Businesses/$(businessId)).data.ownerId == request.auth.uid;
+    }
+
+    match /Businesses/{businessId} {
+      allow read: if ownsBusiness(businessId);
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if ownsBusiness(businessId);
+    }
+
+    match /Users/{userId} {
+      allow read, update: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /Settings/{businessId} {
+      allow read: if true;
+      allow write: if ownsBusiness(businessId);
+    }
+
+    match /FAQs/{faqId} {
+      allow read: if true;
+      allow create: if signedIn() && ownsBusiness(request.resource.data.businessId);
+      allow update, delete: if signedIn() && ownsBusiness(resource.data.businessId);
+    }
+
+    match /Leads/{leadId} {
+      allow create: if true;
+      allow read, update, delete: if signedIn() && ownsBusiness(resource.data.businessId);
+    }
+
+    match /Chats/{chatId} {
+      allow create: if true;
+      allow read, update, delete: if signedIn() && ownsBusiness(resource.data.businessId);
+    }
+  }
+}
