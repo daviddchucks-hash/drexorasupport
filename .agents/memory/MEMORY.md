@@ -1,0 +1,1 @@
+- [GitHub push authentication](github-push-auth.md) — use an ephemeral token remote and merge pre-existing repository history before pushing.
