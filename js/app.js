@@ -8,13 +8,72 @@
    AUTH GUARD — redirect to login if not signed in
    ══════════════════════════════════════════════════════════════ */
 export function requireAuth(callback) {
-  firebase.auth().onAuthStateChanged(function (user) {
+  firebase.auth().onAuthStateChanged(async function (user) {
     if (!user) {
       window.location.href = 'login.html';
     } else {
+      // FIX: Check for and auto-accept any pending team invitations before
+      // handing control to the page. Invitations sent to an existing user
+      // are stored at the root-level pendingInvitations node (keyed by
+      // encoded email) so the invited user can find them without needing
+      // access to the inviting owner's business node.
+      await _acceptPendingInvitations(user);
       callback(user);
     }
   });
+}
+
+/**
+ * Look up pendingInvitations/<encodedEmail> and, for each entry, add the
+ * current user as a team member of the corresponding business, then clean up.
+ *
+ * Email dots are encoded as commas to form valid Firebase Realtime Database
+ * keys (Firebase forbids '.' in key names).
+ */
+async function _acceptPendingInvitations(user) {
+  try {
+    const encodedEmail = user.email.replace(/\./g, ',');
+    const db = firebase.database();
+    const snap = await db.ref('pendingInvitations/' + encodedEmail).once('value');
+    if (!snap.val()) return;
+
+    const pending = snap.val();
+    await Promise.all(Object.entries(pending).map(async ([inviteKey, invite]) => {
+      const { businessUid, businessInviteId, name, role, permissions } = invite;
+      if (!businessUid) return;
+
+      // 1. Add the user to the business team/members node.
+      //    The Firebase rule for $memberId allows auth.uid === $memberId,
+      //    so an invited user can write their own member record.
+      await db.ref('businesses/' + businessUid + '/team/members/' + user.uid).set({
+        name:            name || user.email.split('@')[0],
+        email:           user.email,
+        role:            role || 'agent',
+        status:          'online',
+        lastActive:      Date.now(),
+        assignedTickets: 0,
+        photoUrl:        user.photoURL || '',
+        uid:             user.uid,
+        joinedAt:        Date.now(),
+        permissions:     permissions || {}
+      });
+
+      // 2. Remove the business-level invitation record so the owner's
+      //    pending list stays clean.
+      if (businessInviteId) {
+        await db
+          .ref('businesses/' + businessUid + '/team/invitations/' + businessInviteId)
+          .remove()
+          .catch(() => {}); // non-fatal — may already be gone
+      }
+
+      // 3. Remove from pendingInvitations so this doesn't run again.
+      await db.ref('pendingInvitations/' + encodedEmail + '/' + inviteKey).remove();
+    }));
+  } catch (err) {
+    // Non-fatal — log but don't block the login flow
+    console.warn('[Drexora] Failed to process pending invitations:', err);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════

@@ -352,13 +352,29 @@ async function sendInvite() {
   try {
     const uid = currentUser.uid;
     const inviteRef = db.ref(`businesses/${uid}/team/invitations`).push();
-    await inviteRef.set({
+    const invitePayload = {
       name, email, role,
       status: 'pending',
       createdAt: Date.now(),
       invitedBy: currentUser.email,
       permissions: ROLES[role]?.permissions || ROLES.agent.permissions
-    });
+    };
+    await inviteRef.set(invitePayload);
+
+    // FIX: Also write to the root-level pendingInvitations node so the
+    // invited user (who cannot access the owner's business node) can
+    // discover and accept the invite automatically when they next log in.
+    const encodedEmail = email.replace(/\./g, ',');
+    await firebase.database()
+      .ref(`pendingInvitations/${encodedEmail}/${inviteRef.key}`)
+      .set({
+        businessUid: uid,
+        businessInviteId: inviteRef.key,
+        name, email, role,
+        invitedBy: currentUser.email,
+        permissions: invitePayload.permissions,
+        createdAt: invitePayload.createdAt
+      });
 
     toast(`Invitation sent to ${email}!`, 'success');
     closeModal('invite-modal');
@@ -378,6 +394,15 @@ async function sendInvite() {
 window.cancelInvitation = async function(inviteId) {
   if (!confirm('Cancel this invitation?')) return;
   try {
+    // FIX: Also remove from the root pendingInvitations node so the invited
+    // user no longer receives an outdated invitation on next login.
+    const invite = invitations[inviteId];
+    if (invite?.email) {
+      const encodedEmail = invite.email.replace(/\./g, ',');
+      await firebase.database()
+        .ref(`pendingInvitations/${encodedEmail}/${inviteId}`)
+        .remove();
+    }
     await db.ref(`businesses/${currentUser.uid}/team/invitations/${inviteId}`).remove();
     toast('Invitation cancelled.', 'info');
   } catch {
