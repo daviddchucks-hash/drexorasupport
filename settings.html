@@ -124,6 +124,28 @@
             </form>
           </div>
 
+          <!-- ── FAQ Manager ───────────────────────────────── -->
+          <div class="card animate-fadeUp stagger-1" style="grid-column:1/-1">
+            <div class="settings-section-title">💡 Chat Widget FAQs</div>
+            <div style="font-size:.8rem;color:var(--text-secondary);margin-bottom:16px;line-height:1.6">
+              These questions appear as clickable chips in your chat widget. Visitors click them to get instant answers. Add, edit, or delete them here — changes reflect in the widget immediately.
+            </div>
+
+            <!-- Add FAQ inline form -->
+            <form id="faq-inline-form" style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+              <input class="form-input" type="text" id="faq-q-input" placeholder="Question…" style="flex:2;min-width:160px" required>
+              <input class="form-input" type="text" id="faq-a-input" placeholder="Answer…" style="flex:3;min-width:200px" required>
+              <button type="submit" class="btn btn-primary btn-sm" id="faq-add-btn" style="flex-shrink:0">+ Add FAQ</button>
+            </form>
+
+            <!-- FAQ list -->
+            <div id="settings-faq-list">
+              <div style="text-align:center;padding:24px">
+                <div class="spinner" style="margin:0 auto"></div>
+              </div>
+            </div>
+          </div>
+
           <!-- ── Right column ──────────────────────────────── -->
           <div style="display:flex;flex-direction:column;gap:20px">
 

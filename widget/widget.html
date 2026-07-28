@@ -214,6 +214,7 @@
       visitorId:      null,
       chatId:         null,
       msgCounter:     0,
+      profileReady:   false,   // true once first profile snapshot has arrived
       faqsReady:      false    // true once first FAQ snapshot has arrived
     };
 
@@ -228,8 +229,12 @@
     if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     var db = firebase.database();
 
-    /* ── Load business profile (once) ────────────────────────── */
-    db.ref('businesses/' + businessId + '/profile').once('value').then(function (snap) {
+    /* ── Load business profile (real-time) ───────────────────── *
+     * Uses .on('value') so any settings change saved from the
+     * dashboard is reflected in open widgets immediately —
+     * theme colour, welcome message, title and logo all update
+     * without a page refresh on the host site.                   */
+    db.ref('businesses/' + businessId + '/profile').on('value', function (snap) {
       if (snap.exists()) {
         var p = snap.val();
         state.profile.name           = p.name           || state.profile.name;
@@ -238,8 +243,21 @@
         state.profile.chatTitle      = p.chatTitle      || '';
         state.profile.logoUrl        = p.logoUrl        || '';
       }
-    }).catch(function (err) {
+      if (!state.profileReady) {
+        /* First snapshot — coordinate with FAQ loader */
+        state.profileReady = true;
+        tryInitialRender();
+      } else {
+        /* Profile updated after widget is live — re-render so the
+           new colour / title / welcome message shows immediately   */
+        render();
+      }
+    }, function (err) {
       console.warn('[Drexora] Profile load error:', err);
+      if (!state.profileReady) {
+        state.profileReady = true;
+        tryInitialRender();
+      }
     });
 
     /* ── Real-time FAQ listener ───────────────────────────────── *
@@ -256,21 +274,35 @@
           }
         });
       }
-      /* First snapshot: finish loading and do initial render */
       if (!state.faqsReady) {
+        /* First snapshot — coordinate with profile loader */
         state.faqsReady = true;
-        state.loading   = false;
-        render();
+        tryInitialRender();
+      } else {
+        /* FAQ list changed after widget is live — re-render so the
+           chips (quick-reply buttons) update immediately. Only
+           re-render if no conversation is in progress so we don't
+           interrupt the visitor mid-chat.                          */
+        if (state.open && !state.messages.length) render();
       }
-      /* Subsequent snapshots: no re-render (chat is in progress) */
     }, function (err) {
       console.warn('[Drexora] FAQ load error:', err);
       if (!state.faqsReady) {
         state.faqsReady = true;
-        state.loading   = false;
-        render();
+        tryInitialRender();
       }
     });
+
+    /* ── Coordinate initial render ────────────────────────────── *
+     * Wait for both profile and FAQs to arrive before showing the
+     * widget for the first time, so the visitor always sees the
+     * correct branding and never a flash of default values.        */
+    function tryInitialRender() {
+      if (state.profileReady && state.faqsReady) {
+        state.loading = false;
+        render();
+      }
+    }
 
     /* ── Render ───────────────────────────────────────────────── */
     var root = document.getElementById('app');
@@ -340,12 +372,17 @@
 
       var welcomeHtml = '<div class="bubble bot">' + esc(state.profile.welcomeMessage) + '</div>';
 
-      /* Chips only on empty conversation */
+      /* Chips only on empty conversation — use real FAQ questions
+         from the database so visitors see the actual topics
+         the business has configured. Fall back to generic presets
+         only if no FAQs have been added yet.                      */
       var chipsHtml = '';
       if (!state.messages.length && !state.loading) {
-        var presets = ['How can you help me?', 'What are your prices?', 'I have an issue'];
+        var chipItems = state.faqs.length > 0
+          ? state.faqs.slice(0, 5).map(function (f) { return f.question; })
+          : ['How can you help me?', 'What are your prices?', 'I have an issue'];
         chipsHtml = '<div class="chips">' +
-          presets.map(function (p) {
+          chipItems.map(function (p) {
             return '<button class="chip" data-chip="' + esc(p) + '">' + esc(p) + '</button>';
           }).join('') + '</div>';
       }
@@ -564,7 +601,10 @@
       } catch(e) { return '#a78bfa'; }
     }
 
-    /* ── Initial render (shows launcher immediately) ─────────── */
+    /* ── Initial render ──────────────────────────────────────── *
+     * Show the launcher button immediately (before data loads)
+     * so there's no visible delay for the visitor. The full
+     * panel will use real profile/FAQ data once both load.        */
     render();
 
   }());

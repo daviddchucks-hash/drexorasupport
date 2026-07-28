@@ -8,6 +8,8 @@ import { requireAuth, setupSidebar, toast, escHtml, copyToClipboard } from './ap
 /* ── State ─────────────────────────────────────────────────── */
 let currentUser = null;
 let profile     = {};
+let settingsFaqs = {};   // { faqId: { question, answer } }
+let editingFaqId = null; // null = adding new, string = editing existing
 
 /* ── DOM refs ──────────────────────────────────────────────── */
 const profileForm  = document.getElementById('profile-form');
@@ -32,6 +34,7 @@ requireAuth(user => {
   currentUser = user;
   setupSidebar(user);
   loadProfile(user.uid);
+  loadSettingsFAQs(user.uid);
   renderColourSwatches();
   bindEvents();
 });
@@ -212,11 +215,143 @@ async function deleteAccount() {
   }
 }
 
+/* ── Load FAQs (real-time) for settings page ───────────────── */
+function loadSettingsFAQs(uid) {
+  const db = firebase.database();
+  db.ref(`businesses/${uid}/faqs`).on('value', snap => {
+    settingsFaqs = snap.val() || {};
+    renderSettingsFAQs();
+  });
+}
+
+/* ── Render FAQ list on settings page ──────────────────────── */
+function renderSettingsFAQs() {
+  const list = document.getElementById('settings-faq-list');
+  if (!list) return;
+
+  const entries = Object.entries(settingsFaqs);
+
+  if (!entries.length) {
+    list.innerHTML = `
+      <div style="text-align:center;padding:24px 16px;color:var(--text-muted);font-size:.85rem">
+        No FAQs yet. Add your first question above — it will appear as a clickable chip in the widget.
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = entries.map(([id, faq]) => `
+    <div class="faq-settings-item" data-faq-id="${escHtml(id)}" style="
+      display:flex;align-items:flex-start;gap:12px;padding:12px 14px;
+      border:1px solid var(--glass-border);border-radius:10px;margin-bottom:8px;
+      background:var(--glass-bg);transition:background .15s;">
+      <div style="flex:1;min-width:0">
+        <div id="faq-q-display-${escHtml(id)}" style="font-size:.85rem;font-weight:600;color:var(--text-primary);margin-bottom:3px">
+          ❓ ${escHtml(faq.question)}
+        </div>
+        <div id="faq-a-display-${escHtml(id)}" style="font-size:.8rem;color:var(--text-secondary);line-height:1.5">
+          ${escHtml(faq.answer)}
+        </div>
+        <div class="faq-edit-row" id="faq-edit-row-${escHtml(id)}" style="display:none;margin-top:8px;display:none;flex-direction:column;gap:6px">
+          <input class="form-input" type="text" id="faq-edit-q-${escHtml(id)}" value="${escHtml(faq.question)}" placeholder="Question…" style="font-size:.82rem;padding:7px 10px">
+          <input class="form-input" type="text" id="faq-edit-a-${escHtml(id)}" value="${escHtml(faq.answer)}" placeholder="Answer…" style="font-size:.82rem;padding:7px 10px">
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" onclick="saveInlineEditFAQ('${escHtml(id)}')">Save</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelInlineEditFAQ('${escHtml(id)}')">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-ghost btn-sm" onclick="startInlineEditFAQ('${escHtml(id)}')" title="Edit">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteSettingsFAQ('${escHtml(id)}')" title="Delete">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ── Inline FAQ edit helpers (exposed to onclick) ──────────── */
+window.startInlineEditFAQ = function(id) {
+  const row = document.getElementById(`faq-edit-row-${id}`);
+  const qEl = document.getElementById(`faq-q-display-${id}`);
+  const aEl = document.getElementById(`faq-a-display-${id}`);
+  if (row)  { row.style.display = 'flex'; }
+  if (qEl)  { qEl.style.display = 'none'; }
+  if (aEl)  { aEl.style.display = 'none'; }
+  editingFaqId = id;
+};
+
+window.cancelInlineEditFAQ = function(id) {
+  const row = document.getElementById(`faq-edit-row-${id}`);
+  const qEl = document.getElementById(`faq-q-display-${id}`);
+  const aEl = document.getElementById(`faq-a-display-${id}`);
+  if (row)  { row.style.display = 'none'; }
+  if (qEl)  { qEl.style.display = ''; }
+  if (aEl)  { aEl.style.display = ''; }
+  editingFaqId = null;
+};
+
+window.saveInlineEditFAQ = async function(id) {
+  const qInput = document.getElementById(`faq-edit-q-${id}`);
+  const aInput = document.getElementById(`faq-edit-a-${id}`);
+  const question = qInput?.value.trim();
+  const answer   = aInput?.value.trim();
+  if (!question || !answer) { toast('Both question and answer are required.', 'warning'); return; }
+
+  try {
+    await firebase.database()
+      .ref(`businesses/${currentUser.uid}/faqs/${id}`)
+      .update({ question, answer, updatedAt: firebase.database.ServerValue.TIMESTAMP });
+    toast('FAQ updated.', 'success');
+    editingFaqId = null;
+  } catch (err) {
+    toast('Failed to update FAQ.', 'error');
+  }
+};
+
+window.deleteSettingsFAQ = async function(id) {
+  if (!confirm('Delete this FAQ?')) return;
+  try {
+    await firebase.database().ref(`businesses/${currentUser.uid}/faqs/${id}`).remove();
+    toast('FAQ deleted.', 'success');
+  } catch (err) {
+    toast('Failed to delete FAQ.', 'error');
+  }
+};
+
+/* ── Add new FAQ from inline form ──────────────────────────── */
+async function addSettingsFAQ(e) {
+  e.preventDefault();
+  const qInput = document.getElementById('faq-q-input');
+  const aInput = document.getElementById('faq-a-input');
+  const question = qInput?.value.trim();
+  const answer   = aInput?.value.trim();
+
+  if (!question || !answer) { toast('Please fill in both question and answer.', 'warning'); return; }
+
+  const btn = document.getElementById('faq-add-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+
+  try {
+    await firebase.database()
+      .ref(`businesses/${currentUser.uid}/faqs`)
+      .push({ question, answer, createdAt: firebase.database.ServerValue.TIMESTAMP });
+    toast('FAQ added! It\'s now live in the widget.', 'success');
+    if (qInput) qInput.value = '';
+    if (aInput) aInput.value = '';
+  } catch (err) {
+    toast('Failed to add FAQ.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '+ Add FAQ'; }
+  }
+}
+
 /* ── Bind events ───────────────────────────────────────────── */
 function bindEvents() {
   profileForm?.addEventListener('submit', saveProfile);
   pwForm?.addEventListener('submit', changePassword);
   deleteBtn?.addEventListener('click', deleteAccount);
+
+  // FAQ inline form
+  document.getElementById('faq-inline-form')?.addEventListener('submit', addSettingsFAQ);
 
   // Live logo preview
   logoInput?.addEventListener('change', () => {
