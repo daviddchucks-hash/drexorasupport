@@ -95,55 +95,6 @@
       <!-- Page body -->
       <div class="page-body">
 
-        <!-- ⚠️ Firebase Rules Alert — shown until rules are confirmed working -->
-        <div class="card animate-fadeUp" id="firebase-rules-alert" style="margin-bottom:20px;border-color:rgba(239,150,0,.4);background:rgba(239,150,0,.07)">
-          <div style="display:flex;align-items:flex-start;gap:14px">
-            <div style="font-size:1.6rem;flex-shrink:0">🔒</div>
-            <div style="flex:1">
-              <div style="font-size:.95rem;font-weight:700;margin-bottom:4px;color:#b45309">Action Required: Update Your Firebase Realtime Database Rules</div>
-              <div style="font-size:.82rem;color:var(--text-secondary);line-height:1.7;margin-bottom:12px">
-                Your widget runs on visitors' browsers <strong>without logging in</strong>, so Firebase must allow public reads of your profile and FAQs.
-                Without this, the widget shows default purple colours and can't find your FAQs — exactly what you are seeing.<br>
-                <strong>This is a one-time fix in your Firebase Console.</strong>
-              </div>
-              <div style="font-size:.82rem;font-weight:600;margin-bottom:6px">Steps:</div>
-              <ol style="font-size:.8rem;color:var(--text-secondary);line-height:1.8;padding-left:18px;margin-bottom:12px">
-                <li>Go to <a href="https://console.firebase.google.com/project/drexorasupport/database/drexorasupport-default-rtdb/rules" target="_blank" style="color:var(--primary);font-weight:600">Firebase Console → Realtime Database → Rules</a></li>
-                <li>Replace ALL the content with the rules below</li>
-                <li>Click <strong>Publish</strong></li>
-              </ol>
-              <div class="code-block" id="rules-code" style="font-size:.75rem;line-height:1.7;white-space:pre;overflow-x:auto;margin-bottom:10px">{
-  "rules": {
-    "businesses": {
-      "$uid": {
-        "profile": {
-          ".read": true,
-          ".write": "auth != null &amp;&amp; auth.uid === $uid"
-        },
-        "faqs": {
-          ".read": true,
-          ".write": "auth != null &amp;&amp; auth.uid === $uid"
-        },
-        "chats": {
-          ".read": "auth != null &amp;&amp; auth.uid === $uid",
-          ".write": true
-        },
-        "leads": {
-          ".read": "auth != null &amp;&amp; auth.uid === $uid",
-          ".write": true
-        }
-      }
-    }
-  }
-}</div>
-              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-                <button class="btn btn-primary btn-sm" onclick="copyFirebaseRules(this)">📋 Copy Rules</button>
-                <a href="https://console.firebase.google.com/project/drexorasupport/database/drexorasupport-default-rtdb/rules" target="_blank" class="btn btn-ghost btn-sm">Open Firebase Console →</a>
-                <button class="btn btn-ghost btn-sm" style="color:var(--text-muted);font-size:.75rem" onclick="document.getElementById('firebase-rules-alert').style.display='none'">Dismiss</button>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <!-- Stats row -->
         <div class="stats-grid">
@@ -304,50 +255,6 @@
   <script src="js/firebase-config.js"></script>
   <script type="module" src="js/dashboard.js"></script>
 
-  <script>
-    /* Copy Firebase rules snippet */
-    function copyFirebaseRules(btn) {
-      var rules = `{
-  "rules": {
-    "businesses": {
-      "$uid": {
-        "profile": {
-          ".read": true,
-          ".write": "auth != null && auth.uid === $uid"
-        },
-        "faqs": {
-          ".read": true,
-          ".write": "auth != null && auth.uid === $uid"
-        },
-        "chats": {
-          ".read": "auth != null && auth.uid === $uid",
-          ".write": true
-        },
-        "leads": {
-          ".read": "auth != null && auth.uid === $uid",
-          ".write": true
-        }
-      }
-    }
-  }
-}`;
-      navigator.clipboard.writeText(rules).then(function() {
-        var orig = btn.textContent;
-        btn.textContent = '✅ Copied!';
-        setTimeout(function() { btn.textContent = orig; }, 2500);
-      }).catch(function() {
-        var ta = document.createElement('textarea');
-        ta.value = rules;
-        ta.style.position = 'fixed'; ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        btn.textContent = '✅ Copied!';
-        setTimeout(function() { btn.textContent = '📋 Copy Rules'; }, 2500);
-      });
-    }
-  </script>
 
   <style>
     @media (max-width: 768px) { .dashboard-cols { grid-template-columns: 1fr !important; } }
