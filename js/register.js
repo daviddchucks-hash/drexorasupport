@@ -14,6 +14,22 @@ const errBox    = document.getElementById('error-msg');
 
 let selectedType = 'company'; // default
 
+/**
+ * FIX — Race condition guard.
+ *
+ * Problem: firebase.auth().onAuthStateChanged fires the moment
+ * createUserWithEmailAndPassword() resolves (the Auth account exists) but
+ * BEFORE the subsequent userWorkspace write finishes.  Dashboard.js then
+ * calls getWorkspaceUid(), finds no record, and falls into the
+ * "legacy owner bootstrap" branch — stamping the team member as owner.
+ *
+ * Solution: set _skipAuthRedirect = true before any createUser* call and
+ * clear it only after ALL database writes are done.  The onAuthStateChanged
+ * listener checks this flag and does nothing during the registration flow.
+ * Redirects are performed explicitly at the end of each _register* function.
+ */
+let _skipAuthRedirect = false;
+
 /* ── Account type cards ─────────────────────────────────── */
 document.querySelectorAll('.account-type-card').forEach(card => {
   card.addEventListener('click', () => {
@@ -39,8 +55,11 @@ function _applyTypeUI(type) {
   document.getElementById('full-name').required      = !isCompany;
 }
 
-/* ── Auth redirect ──────────────────────────────────────── */
+/* ── Auth redirect (only when already logged in on page load) ── */
 firebase.auth().onAuthStateChanged(function (user) {
+  // Do NOT redirect during an active registration — all writes must complete
+  // before we navigate, otherwise dashboard bootstraps the user as owner.
+  if (_skipAuthRedirect) return;
   if (user) window.location.href = 'dashboard.html';
 });
 
@@ -65,6 +84,8 @@ form.addEventListener('submit', async function (e) {
   if (password.length < 6)  return showError('Password must be at least 6 characters.');
 
   setLoading(true);
+  // Block onAuthStateChanged from racing while we write to the DB
+  _skipAuthRedirect = true;
 
   try {
     if (selectedType === 'company') {
@@ -73,6 +94,7 @@ form.addEventListener('submit', async function (e) {
       await _registerTeamMember(email, password);
     }
   } catch (err) {
+    _skipAuthRedirect = false; // re-enable on error so the page still works
     setLoading(false);
     const msgs = {
       'auth/email-already-in-use': 'An account with this email already exists.',
@@ -86,7 +108,7 @@ form.addEventListener('submit', async function (e) {
 /* ── Company registration ───────────────────────────────── */
 async function _registerCompany(email, password) {
   const businessName = document.getElementById('business-name').value.trim();
-  if (!businessName) { setLoading(false); return showError('Business name is required.'); }
+  if (!businessName) { setLoading(false); _skipAuthRedirect = false; return showError('Business name is required.'); }
 
   // 1. Create Firebase Auth account
   const cred = await firebase.auth().createUserWithEmailAndPassword(email, password);
@@ -139,32 +161,35 @@ async function _registerCompany(email, password) {
     permissions:     {}
   });
 
-  // 6. Redirect to dashboard
+  // 6. All writes complete — safe to redirect
+  _skipAuthRedirect = false;
   window.location.href = 'dashboard.html';
 }
 
 /* ── Team member registration ───────────────────────────── */
 async function _registerTeamMember(email, password) {
   const fullName = document.getElementById('full-name').value.trim();
-  if (!fullName) { setLoading(false); return showError('Full name is required.'); }
+  if (!fullName) { setLoading(false); _skipAuthRedirect = false; return showError('Full name is required.'); }
 
   // 1. Create Firebase Auth account
   const cred = await firebase.auth().createUserWithEmailAndPassword(email, password);
   const uid  = cred.user.uid;
   const db   = firebase.database();
 
-  // 2. Store a "pending setup" userWorkspace entry (no businessUid yet)
-  //    When an admin invites this email and the user logs in, _acceptPendingInvitations
-  //    in app.js will write the real businessUid and clear pendingSetup.
+  // 2. Store a "pending setup" userWorkspace entry (no businessUid yet).
+  //    This MUST be written before we navigate — otherwise dashboard's
+  //    getWorkspaceUid() finds nothing and bootstraps the user as owner.
   await db.ref(`userWorkspace/${uid}`).set({
     accountType:  'team_member',
+    role:         'agent',
     pendingSetup: true,
     name:         fullName,
     email:        email,
     joinedAt:     firebase.database.ServerValue.TIMESTAMP
   });
 
-  // 3. Try to accept any invitation that was already sent before they registered
-  //    If accepted, app.js will handle the redirect from dashboard.
+  // 3. All writes complete — safe to redirect.
+  //    app.js _acceptPendingInvitations will handle any existing invite on arrival.
+  _skipAuthRedirect = false;
   window.location.href = 'dashboard.html';
 }

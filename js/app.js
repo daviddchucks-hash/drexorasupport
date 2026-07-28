@@ -327,8 +327,22 @@ export function setupSidebar(user) {
 /**
  * Hide or restrict UI elements based on the current user's role.
  * Called after the sidebar is set up so DOM elements already exist.
- * Pages that inject their own buttons (team.js, settings.js) also call
- * this independently, but having it here ensures it always runs.
+ *
+ * FIX — three issues addressed here:
+ *
+ * 1. Redirect: team members landing on team.html / tickets.html are
+ *    bounced immediately (unchanged from before).
+ *
+ * 2. Nav links: team.html and tickets.html are removed from the sidebar
+ *    (unchanged from before).
+ *
+ * 3. Dashboard content-area: the widget installation card AND the two
+ *    "Manage team →" links (Quick Actions + Online Agents section) are
+ *    now also hidden — they previously had no IDs so _applyRoleRestrictions
+ *    never touched them even though they appeared on every dashboard load.
+ *
+ * 4. Settings page: install-code-card and workspace-settings-card are
+ *    hidden (unchanged from before).
  */
 function _applyRoleRestrictions(role) {
   const isTeamMember = role === 'agent' || role === 'viewer';
@@ -347,6 +361,20 @@ function _applyRoleRestrictions(role) {
         hidden, so a CSS inspector can't reveal them either.         */
   document.querySelector('.nav-item[href="team.html"]')?.remove();
   document.querySelector('.nav-item[href="tickets.html"]')?.remove();
+
+  /* ── Dashboard: hide the widget installation code card ─────
+        The card sits on dashboard.html with id="dashboard-install-card".
+        Team members have no need to install or share widget code.     */
+  const dashInstallCard = document.getElementById('dashboard-install-card');
+  if (dashInstallCard) dashInstallCard.style.display = 'none';
+
+  /* ── Dashboard: remove "Manage Team" links in the content area ─
+        Quick Actions card:    id="quick-actions-team-link"
+        Online Agents section: id="online-agents-manage-link"
+        These were never targeted before — only sidebar nav links
+        were removed, leaving two visible team.html entry points.     */
+  document.getElementById('quick-actions-team-link')?.remove();
+  document.getElementById('online-agents-manage-link')?.remove();
 
   /* ── Settings page: hide widget install code and workspace
         settings section — agents never need those controls         ── */
