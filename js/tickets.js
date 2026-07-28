@@ -59,10 +59,20 @@ function populateAgentDropdown() {
 }
 
 function loadTickets() {
+  // Support ?id= URL param: auto-open a specific ticket when navigating from Workspace
+  const urlId = new URLSearchParams(window.location.search).get('id');
+
   db.ref(`businesses/${workspaceUid}/tickets`).on('value', snap => {
     tickets = snap.val() || {};
     renderTickets();
     updateStats();
+    // Auto-open the ticket specified in the URL (first load only)
+    if (urlId && !openTicketId && tickets[urlId]) {
+      openTicketId = urlId;
+      window.openTicketPanel(urlId);
+      // Clean up URL so refreshing doesn't re-trigger
+      history.replaceState(null, '', 'tickets.html');
+    }
   });
 }
 

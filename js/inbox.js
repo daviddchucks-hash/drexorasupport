@@ -47,6 +47,9 @@ function loadTeamMembers() {
 }
 
 function loadChats() {
+  // Support ?id= URL param: auto-select a specific chat when navigating from Workspace
+  const urlId = new URLSearchParams(window.location.search).get('id');
+
   firebase.database().ref(`businesses/${workspaceUid}/chats`)
     .on('value', snap => {
       const raw = snap.val() || {};
@@ -55,7 +58,22 @@ function loadChats() {
         .sort((a,b) => (b.updatedAt||b.createdAt||0) - (a.updatedAt||a.createdAt||0));
       updateFilterCounts();
       renderList();
-      if (selectedId) renderDetail(selectedId);
+      // Auto-open the chat specified in the URL (first load only)
+      if (urlId && !selectedId) {
+        selectedId = urlId;
+        // Switch to "mine" filter so the item is visible in the list
+        activeFilter = 'all';
+        document.querySelectorAll('[data-filter]').forEach(b => {
+          b.classList.toggle('active', b.dataset.filter === 'all');
+        });
+        updateFilterCounts();
+        renderList();
+        renderDetail(selectedId);
+        // Clean up the URL so refreshing doesn't re-trigger
+        history.replaceState(null, '', 'inbox.html');
+      } else if (selectedId) {
+        renderDetail(selectedId);
+      }
     });
 }
 

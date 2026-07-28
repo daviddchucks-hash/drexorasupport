@@ -151,7 +151,7 @@ function chatQueueCard(id, chat) {
       <div class="queue-card-meta">${escHtml(chat.customerEmail||chat.visitorId||'')}</div>
       <div style="font-size:.82rem;color:var(--text-secondary);margin-top:5px;line-height:1.5">${preview}</div>
       <div class="queue-card-actions">
-        <a href="inbox.html" class="btn btn-primary btn-sm">Open in Inbox</a>
+        <a href="inbox.html?id=${escHtml(id)}" class="btn btn-primary btn-sm">Open in Inbox</a>
         ${canAct ? `<button class="btn btn-ghost btn-sm" onclick="openAssignModal('chat','${escHtml(id)}','${escHtml(chat.customerName||'Visitor')}')">🔄 Reassign</button>` : ''}
         ${status !== 'resolved' ? `<button class="btn btn-success btn-sm" onclick="resolveChat('${escHtml(id)}')">✅ Resolve</button>` : ''}
       </div>
@@ -181,7 +181,7 @@ function ticketQueueCard(id, ticket) {
       <div class="queue-card-meta">${escHtml(ticket.customerName||'—')} · ${escHtml(ticket.customerEmail||'—')}</div>
       ${ticket.description ? `<div style="font-size:.82rem;color:var(--text-secondary);margin-top:5px;line-height:1.5">${escHtml(ticket.description.slice(0,100))}${ticket.description.length>100?'…':''}</div>` : ''}
       <div class="queue-card-actions">
-        <a href="tickets.html" class="btn btn-primary btn-sm">Open in Tickets</a>
+        <a href="tickets.html?id=${escHtml(id)}" class="btn btn-primary btn-sm">Open in Tickets</a>
         ${canAct ? `<button class="btn btn-ghost btn-sm" onclick="openAssignModal('ticket','${escHtml(id)}','${escHtml(ticket.subject||ticket.ticketId||id)}')">🔄 Reassign</button>` : ''}
         ${status === 'open' || status === 'pending' ? `<button class="btn btn-success btn-sm" onclick="resolveTicket('${escHtml(id)}')">✅ Resolve</button>` : ''}
       </div>

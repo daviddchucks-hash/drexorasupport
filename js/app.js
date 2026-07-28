@@ -87,8 +87,17 @@ export function requireAuth(callback) {
     if (!user) {
       window.location.href = 'login.html';
     } else {
-      await _acceptPendingInvitations(user);
+      const didAccept = await _acceptPendingInvitations(user);
       const wid = await getWorkspaceUid();
+      // If a pending invitation was just accepted, send the user straight to
+      // the Workspace so they immediately see their assigned queue.
+      if (didAccept) {
+        const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+        if (!['workspace.html', 'login.html', 'register.html', 'waiting.html'].includes(currentPage)) {
+          window.location.href = 'workspace.html';
+          return;
+        }
+      }
       callback(user, wid);
     }
   });
@@ -100,11 +109,12 @@ export function requireAuth(callback) {
  * (dots in email → commas, since Firebase forbids '.' in keys).
  */
 async function _acceptPendingInvitations(user) {
+  let accepted = false;
   try {
     const encodedEmail = user.email.replace(/\./g, ',');
     const db   = firebase.database();
     const snap = await db.ref('pendingInvitations/' + encodedEmail).once('value');
-    if (!snap.val()) return;
+    if (!snap.val()) return false;
 
     const pending = snap.val();
     await Promise.all(Object.entries(pending).map(async ([inviteKey, invite]) => {
@@ -154,10 +164,12 @@ async function _acceptPendingInvitations(user) {
 
       // 5. Clean up pendingInvitations
       await db.ref(`pendingInvitations/${encodedEmail}/${inviteKey}`).remove();
+      accepted = true;
     }));
   } catch (err) {
     console.warn('[Drexora] Failed to process pending invitations:', err);
   }
+  return accepted;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -305,6 +317,9 @@ export function setupSidebar(user) {
   /* ── Notification badge ─────────────────────────────────── */
   _watchNotifications(user);
 
+  /* ── Workspace queue badge (assigned chats + tickets) ───── */
+  _watchWorkspaceBadge(user);
+
   /* ── Role-based UI restrictions ─────────────────────────── */
   getCurrentUserRole().then(role => _applyRoleRestrictions(role));
 }
@@ -433,6 +448,53 @@ async function _watchNotifications(user) {
           }
         }
       });
+  } catch (e) { /* non-fatal */ }
+}
+
+/**
+ * Watch the current user's assigned chats and tickets across the workspace
+ * and update the Workspace nav badge with a live count of active items.
+ * Badge shows on every page so team members always know their queue size.
+ */
+async function _watchWorkspaceBadge(user) {
+  try {
+    const wid = await getWorkspaceUid();
+    if (!wid) return;
+    const db  = firebase.database();
+
+    let chatCount   = 0;
+    let ticketCount = 0;
+
+    const updateBadge = () => {
+      const total = chatCount + ticketCount;
+      const badge = document.getElementById('workspace-badge');
+      if (badge) {
+        if (total > 0) {
+          badge.textContent    = total > 99 ? '99+' : total;
+          badge.style.display  = 'inline-flex';
+        } else {
+          badge.style.display  = 'none';
+        }
+      }
+    };
+
+    // Watch chats assigned to current user (exclude resolved/closed)
+    db.ref(`businesses/${wid}/chats`).on('value', snap => {
+      const data = snap.val() || {};
+      chatCount  = Object.values(data).filter(c =>
+        c.assignedTo === user.uid && !['resolved', 'closed'].includes(c.status)
+      ).length;
+      updateBadge();
+    });
+
+    // Watch tickets assigned to current user (exclude resolved/closed)
+    db.ref(`businesses/${wid}/tickets`).on('value', snap => {
+      const data  = snap.val() || {};
+      ticketCount = Object.values(data).filter(t =>
+        t.assignedAgent === user.uid && !['resolved', 'closed'].includes(t.status)
+      ).length;
+      updateBadge();
+    });
   } catch (e) { /* non-fatal */ }
 }
 
