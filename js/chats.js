@@ -190,8 +190,23 @@ function renderChatDetail(chatId) {
   const status    = chat.status || 'open';
   const sc        = STATUS_CFG[status] || STATUS_CFG.open;
   const assignee  = chat.assignedTo ? (teamMembers[chat.assignedTo] || null) : null;
-  const canEdit   = ['owner','admin','agent'].includes(userRole);
-  const isAssignedToMe = chat.assignedTo === currentUser.uid;
+  const isAssignedToMe   = chat.assignedTo === currentUser.uid;
+  // ── Granular role permissions ───────────────────────────────
+  // canAssignOthers: only owner/admin can assign conversations to specific agents
+  const canAssignOthers  = ['owner','admin'].includes(userRole);
+  // canReply: owner/admin always; agent only if THIS chat is assigned to them
+  const canReply         = ['owner','admin'].includes(userRole) ||
+                           (userRole === 'agent' && isAssignedToMe);
+  // canAct: owner/admin or agent assigned to this chat (resolve, close, etc.)
+  const canAct           = ['owner','admin'].includes(userRole) ||
+                           (userRole === 'agent' && isAssignedToMe);
+  // canClaimSelf: agents can claim unassigned chats for themselves
+  const canClaimSelf     = userRole === 'agent' && !chat.assignedTo;
+  // canRequestAssign: agents/viewers not assigned to this chat can request it
+  const canRequestAssign = (userRole === 'agent' || userRole === 'viewer') &&
+                           !isAssignedToMe &&
+                           chat.status !== 'resolved' && chat.status !== 'closed';
+  const isViewer         = userRole === 'viewer';
 
   const agentOptions = Object.entries(teamMembers)
     .filter(([,m]) => ['owner','admin','agent'].includes(m.role))
@@ -258,7 +273,7 @@ function renderChatDetail(chatId) {
         </div>
 
         <!-- Reply / Note input -->
-        ${canEdit ? `
+        ${canReply ? `
         <div style="padding:14px 16px;border-top:1px solid var(--border);background:var(--surface)">
           <div style="display:flex;gap:10px;align-items:flex-end">
             <textarea id="reply-input" placeholder="${notesMode ? 'Write an internal note…' : 'Type a reply…'}"
@@ -266,13 +281,29 @@ function renderChatDetail(chatId) {
                              background:var(--input-bg);border:1px solid var(--border);border-radius:8px;
                              color:var(--text-primary);font-size:.875rem;font-family:inherit;outline:none;
                              transition:border-color .15s"
-                      rows="2" id="reply-input"></textarea>
+                      rows="2"></textarea>
             <button id="send-reply-btn" class="btn btn-primary btn-sm"
                     style="padding:10px 16px;white-space:nowrap">
               ${notesMode ? '📝 Note' : '↩ Send'}
             </button>
           </div>
-        </div>` : ''}
+        </div>` : canRequestAssign ? `
+        <div style="padding:14px 16px;border-top:1px solid var(--border);background:var(--surface)">
+          <div style="background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.2);border-radius:8px;
+                      padding:12px 14px;text-align:center">
+            <div style="font-size:.8rem;color:var(--text-secondary);margin-bottom:8px">
+              ${isViewer ? '👁 You have read-only access to this conversation.' : '⚠️ This conversation is not assigned to you.'}
+            </div>
+            <button id="request-assign-btn" class="btn btn-ghost btn-sm">
+              🙋 Request Assignment
+            </button>
+          </div>
+        </div>` : `
+        <div style="padding:12px 16px;border-top:1px solid var(--border);background:var(--surface)">
+          <div style="font-size:.78rem;color:var(--text-muted);text-align:center">
+            👁 Read-only — this conversation is resolved or closed.
+          </div>
+        </div>`}
       </div>
 
       <!-- Sidebar info -->
@@ -291,7 +322,7 @@ function renderChatDetail(chatId) {
         </div>
 
         <!-- Assignment -->
-        ${canEdit ? `
+        ${canAssignOthers ? `
         <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
           <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Assigned To</div>
           <select id="assign-agent-select" class="form-input form-select" style="font-size:.82rem;padding:7px 10px">
@@ -301,14 +332,17 @@ function renderChatDetail(chatId) {
           <button id="assign-btn" class="btn btn-ghost btn-sm btn-block" style="margin-top:6px;font-size:.78rem">
             Assign
           </button>
-        </div>` : assignee ? `
+        </div>` : `
         <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
           <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Assigned To</div>
-          <div style="font-size:.85rem;font-weight:600">${escHtml(assignee.name||assignee.email)}</div>
-        </div>` : ''}
+          ${assignee
+            ? `<div style="font-size:.85rem;font-weight:600">${escHtml(assignee.name||assignee.email)}</div>
+               ${isAssignedToMe ? '<div style="font-size:.72rem;color:#10b981;margin-top:3px">✓ Assigned to you</div>' : ''}`
+            : `<div style="font-size:.82rem;color:var(--text-muted)">Unassigned</div>`}
+        </div>`}
 
         <!-- Priority -->
-        ${canEdit ? `
+        ${canAct ? `
         <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
           <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Priority</div>
           <select id="priority-select" class="form-input form-select" style="font-size:.82rem;padding:7px 10px">
@@ -316,22 +350,27 @@ function renderChatDetail(chatId) {
             ${['low','medium','high','urgent'].map(p => `<option value="${p}" ${chat.priority===p?'selected':''}>${p.charAt(0).toUpperCase()+p.slice(1)}</option>`).join('')}
           </select>
           <button id="set-priority-btn" class="btn btn-ghost btn-sm btn-block" style="margin-top:6px;font-size:.78rem">Set Priority</button>
+        </div>` : chat.priority ? `
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:6px">Priority</div>
+          <span class="badge ${PRIORITY_CFG[chat.priority]?.badge||''}" style="font-size:.75rem">${escHtml(chat.priority)}</span>
         </div>` : ''}
 
         <!-- Actions -->
-        ${canEdit ? `
         <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
           <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Actions</div>
           <div style="display:flex;flex-direction:column;gap:6px">
-            ${status !== 'resolved' ? `<button class="btn btn-success btn-sm" data-action="resolve">✅ Resolve</button>` : ''}
-            ${status !== 'closed'   ? `<button class="btn btn-ghost btn-sm" data-action="close">🔒 Close</button>`   : ''}
-            ${status !== 'assigned' && status !== 'resolved' && status !== 'closed'
+            ${canAct && status !== 'resolved' ? `<button class="btn btn-success btn-sm" data-action="resolve">✅ Resolve</button>` : ''}
+            ${canAct && status !== 'closed'   ? `<button class="btn btn-ghost btn-sm"   data-action="close">🔒 Close</button>`   : ''}
+            ${canClaimSelf && status !== 'assigned' && status !== 'resolved' && status !== 'closed'
               ? `<button class="btn btn-ghost btn-sm" data-action="assign_me">👤 Assign to Me</button>` : ''}
-            <button class="btn btn-ghost btn-sm" data-action="transfer">🔄 Transfer</button>
-            <button class="btn btn-ghost btn-sm" data-action="create_ticket">🎫 Create Ticket</button>
-            <button class="btn btn-danger btn-sm" data-action="delete">🗑 Delete</button>
+            ${canAssignOthers && status !== 'assigned' && status !== 'resolved' && status !== 'closed'
+              ? `<button class="btn btn-ghost btn-sm" data-action="assign_me">👤 Assign to Me</button>` : ''}
+            ${canAssignOthers ? `<button class="btn btn-ghost btn-sm" data-action="transfer">🔄 Transfer</button>` : ''}
+            ${canAct          ? `<button class="btn btn-ghost btn-sm" data-action="create_ticket">🎫 Create Ticket</button>` : ''}
+            ${canAssignOthers ? `<button class="btn btn-danger btn-sm" data-action="delete">🗑 Delete</button>` : ''}
           </div>
-        </div>` : ''}
+        </div>
 
         <!-- Activity log -->
         <div style="padding:14px 16px">
@@ -479,6 +518,33 @@ function bindDetailEvents(chatId, chat) {
   sendBtn?.addEventListener('click', send);
   replyInput?.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+
+  // Request Assignment (agent/viewer who is not assigned to this chat)
+  document.getElementById('request-assign-btn')?.addEventListener('click', async () => {
+    const db = firebase.database();
+    const myName = userRec?.name || currentUser.email.split('@')[0];
+    try {
+      // Notify all owners/admins in the workspace
+      const membersSnap = await db.ref(`businesses/${workspaceUid}/team/members`).once('value');
+      const members = membersSnap.val() || {};
+      const admins  = Object.entries(members).filter(([,m]) => ['owner','admin'].includes(m.role));
+      await Promise.all(admins.map(([adminUid]) =>
+        db.ref(`businesses/${workspaceUid}/notifications/${adminUid}`).push({
+          type:      'assignment_request',
+          message:   `${myName} is requesting assignment to a conversation with ${escHtml(chat.customerName || 'a visitor')}.`,
+          chatId,
+          fromUid:   currentUser.uid,
+          fromName:  myName,
+          read:      false,
+          createdAt: Date.now()
+        })
+      ));
+      await logActivity(workspaceUid, `${myName} requested assignment to a conversation`, { type: 'assignment_request', chatId });
+      toast('Assignment request sent to admins.', 'success');
+      const btn = document.getElementById('request-assign-btn');
+      if (btn) { btn.textContent = '✓ Request Sent'; btn.disabled = true; }
+    } catch { toast('Failed to send request.', 'error'); }
   });
 
   // Assign

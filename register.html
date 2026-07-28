@@ -10,6 +10,50 @@
   <script>
     (function(){if(localStorage.getItem('drexora-theme')==='dark')document.documentElement.classList.add('dark-mode');})();
   </script>
+  <style>
+    .account-type-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .account-type-card {
+      border: 2px solid var(--border, rgba(255,255,255,.12));
+      border-radius: 12px;
+      padding: 16px 14px;
+      cursor: pointer;
+      transition: border-color .18s, background .18s;
+      background: transparent;
+      text-align: left;
+      width: 100%;
+    }
+    .account-type-card:hover {
+      border-color: var(--primary-light, #C9A227);
+      background: rgba(201,162,39,.05);
+    }
+    .account-type-card.selected {
+      border-color: var(--primary, #C9A227);
+      background: rgba(201,162,39,.08);
+    }
+    .account-type-icon {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+    }
+    .account-type-title {
+      font-size: .88rem;
+      font-weight: 700;
+      color: var(--text-primary, #f1f1f1);
+      margin-bottom: 3px;
+    }
+    .account-type-desc {
+      font-size: .72rem;
+      color: var(--text-muted, #888);
+      line-height: 1.5;
+    }
+    .account-type-card.selected .account-type-title {
+      color: var(--primary, #C9A227);
+    }
+  </style>
 </head>
 <body class="landing-body">
   <div style="position:fixed;top:18px;right:20px;z-index:300">
@@ -30,7 +74,7 @@
       </div>
 
       <h1 class="auth-title">Create your account</h1>
-      <p class="auth-subtitle">Set up your business and start collecting leads today.</p>
+      <p class="auth-subtitle" id="reg-subtitle">Set up your business and start collecting leads today.</p>
 
       <!-- Error message -->
       <div id="error-msg" style="
@@ -44,11 +88,36 @@
         margin-bottom:16px;
       "></div>
 
+      <!-- Account type selector -->
+      <div style="margin-bottom:4px">
+        <div style="font-size:.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Account Type</div>
+        <div class="account-type-grid">
+          <button type="button" class="account-type-card selected" id="type-company" data-type="company">
+            <div class="account-type-icon">🏢</div>
+            <div class="account-type-title">Company</div>
+            <div class="account-type-desc">Create a workspace for your business with full access to all features.</div>
+          </button>
+          <button type="button" class="account-type-card" id="type-team-member" data-type="team_member">
+            <div class="account-type-icon">👤</div>
+            <div class="account-type-title">Team Member</div>
+            <div class="account-type-desc">Join an existing company workspace when invited by an admin.</div>
+          </button>
+        </div>
+      </div>
+
       <!-- Register form -->
       <form id="register-form" novalidate>
-        <div class="form-group">
+
+        <!-- Business name (company only) -->
+        <div class="form-group" id="field-business-name">
           <label class="form-label" for="business-name">Business Name</label>
-          <input class="form-input" type="text" id="business-name" placeholder="e.g. Acme Corp" required autocomplete="organization">
+          <input class="form-input" type="text" id="business-name" placeholder="e.g. Acme Corp" autocomplete="organization">
+        </div>
+
+        <!-- Full name (team member only, hidden by default) -->
+        <div class="form-group" id="field-full-name" style="display:none">
+          <label class="form-label" for="full-name">Full Name</label>
+          <input class="form-input" type="text" id="full-name" placeholder="e.g. Sarah Johnson" autocomplete="name">
         </div>
 
         <div class="form-group">
@@ -64,6 +133,21 @@
         <div class="form-group">
           <label class="form-label" for="confirm-password">Confirm Password</label>
           <input class="form-input" type="password" id="confirm-password" placeholder="Repeat your password" required autocomplete="new-password">
+        </div>
+
+        <!-- Team member notice -->
+        <div id="team-member-notice" style="
+          display:none;
+          background:rgba(99,102,241,.08);
+          border:1px solid rgba(99,102,241,.25);
+          border-radius:8px;
+          padding:12px 14px;
+          font-size:.8rem;
+          color:var(--text-secondary);
+          line-height:1.6;
+          margin-bottom:16px;
+        ">
+          ℹ️ After registering, ask your company admin to invite you to their workspace using this email address. You'll be added automatically when you log in.
         </div>
 
         <div style="margin-bottom:16px;font-size:.78rem;color:var(--text-muted);line-height:1.6">

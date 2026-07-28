@@ -32,12 +32,32 @@ requireAuth(async (user, wid) => {
   workspaceUid = wid;
   userRole     = await getCurrentUserRole();
   setupSidebar(user);
+  _applySettingsRoleUI(userRole);
   loadProfile();
   loadSettingsFAQs();
   loadWorkspaceSettings();
   renderColourSwatches();
   bindEvents();
 });
+
+/**
+ * Hide settings sections that team members (agents/viewers) must not access:
+ *  - Widget Installation Code (script tag embed)
+ *  - Workspace Settings (assignment mode, AI toggle, widget toggle)
+ *  - FAQ Manager is hidden for viewers (read-only role)
+ */
+function _applySettingsRoleUI(role) {
+  const isTeamMember = role === 'agent' || role === 'viewer';
+  if (!isTeamMember) return;
+
+  const installCard = document.getElementById('install-code-card');
+  const wsCard      = document.getElementById('workspace-settings-card');
+  const faqCard     = document.getElementById('faq-manager-card');
+
+  if (installCard) installCard.style.display = 'none';
+  if (wsCard)      wsCard.style.display      = 'none';
+  if (role === 'viewer' && faqCard) faqCard.style.display = 'none';
+}
 
 async function loadProfile() {
   const db = firebase.database();

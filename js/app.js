@@ -32,19 +32,27 @@ export async function getWorkspaceUid() {
     _workspaceUid = data.businessUid;
     _userRole     = data.role || 'agent';
     _userRecord   = data;
+  } else if (data && data.accountType === 'team_member' && data.pendingSetup) {
+    // Team member account created but no workspace invitation accepted yet.
+    // Stay on waiting.html; all other pages redirect there.
+    if (!window.location.pathname.endsWith('waiting.html')) {
+      window.location.href = 'waiting.html';
+    }
+    return null;
   } else {
     // First login as owner (or pre-migration legacy owner):
     // bootstrap their userWorkspace entry pointing to themselves.
     await db.ref(`userWorkspace/${user.uid}`).set({
       businessUid: user.uid,
       role:        'owner',
+      accountType: 'company',
       name:        user.displayName || user.email.split('@')[0],
       email:       user.email,
       joinedAt:    Date.now()
     });
     _workspaceUid = user.uid;
     _userRole     = 'owner';
-    _userRecord   = { businessUid: user.uid, role: 'owner', email: user.email };
+    _userRecord   = { businessUid: user.uid, role: 'owner', accountType: 'company', email: user.email };
   }
 
   return _workspaceUid;
@@ -296,6 +304,33 @@ export function setupSidebar(user) {
 
   /* ── Notification badge ─────────────────────────────────── */
   _watchNotifications(user);
+
+  /* ── Role-based UI restrictions ─────────────────────────── */
+  getCurrentUserRole().then(role => _applyRoleRestrictions(role));
+}
+
+/**
+ * Hide or restrict UI elements based on the current user's role.
+ * Called after the sidebar is set up so DOM elements already exist.
+ * Pages that inject their own buttons (team.js, settings.js) also call
+ * this independently, but having it here ensures it always runs.
+ */
+function _applyRoleRestrictions(role) {
+  const isTeamMember = role === 'agent' || role === 'viewer';
+  if (!isTeamMember) return; // owners and admins see everything
+
+  // ── Team page: hide "Invite Teammate" button ──────────────
+  const inviteBtn = document.getElementById('invite-btn');
+  if (inviteBtn) inviteBtn.style.display = 'none';
+
+  // ── Settings page: hide widget install code + workspace settings ──
+  const installCard  = document.getElementById('install-code-card');
+  const wsCard       = document.getElementById('workspace-settings-card');
+  const faqCard      = document.getElementById('faq-manager-card');
+  if (installCard) installCard.style.display = 'none';
+  if (wsCard)      wsCard.style.display      = 'none';
+  // Viewers also hide FAQ manager (read-only)
+  if (role === 'viewer' && faqCard) faqCard.style.display = 'none';
 }
 
 function _injectInboxNavLink() {

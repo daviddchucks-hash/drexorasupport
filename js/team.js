@@ -72,11 +72,23 @@ requireAuth(async (user, wid) => {
   userRec      = await getUserRecord();
   db           = firebase.database();
   setupSidebar(user);
+  _applyTeamRoleUI(userRole);
   bindEvents();
   loadTeam();
   loadIncomingInvitations();
   setupPermissionPreview();
 });
+
+/**
+ * Agents and viewers cannot invite teammates or manage team settings.
+ * Hide the Invite Teammate button; the team table remains visible
+ * so they can see who else is on the team.
+ */
+function _applyTeamRoleUI(role) {
+  if (['owner', 'admin'].includes(role)) return; // full access
+  const inviteBtn = document.getElementById('invite-btn');
+  if (inviteBtn) inviteBtn.style.display = 'none';
+}
 
 function loadTeam() {
   let mLoaded = false, iLoaded = false;
