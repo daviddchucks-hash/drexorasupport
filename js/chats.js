@@ -1,6 +1,7 @@
 /**
  * chats.js — ES6 Module
  * View conversations collected via the widget.
+ * Includes agent reply input so admins can send messages to customers.
  */
 
 import { requireAuth, setupSidebar, toast, formatDate, timeAgo, escHtml } from './app.js';
@@ -118,7 +119,7 @@ function renderChatDetail(chatId) {
   const started = chat.createdAt ? new Date(chat.createdAt).toLocaleString() : 'Unknown time';
 
   chatDetail.innerHTML = `
-    <div style="padding:20px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;justify-content:space-between">
+    <div style="padding:20px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
       <div>
         <div style="font-size:.9rem;font-weight:700">Visitor ${escHtml((chat.visitorId || 'Unknown').slice(-6))}</div>
         <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">Started ${started}</div>
@@ -131,14 +132,33 @@ function renderChatDetail(chatId) {
         <button class="btn btn-danger btn-sm" data-delete-chat="${escHtml(chatId)}">🗑 Delete</button>
       </div>
     </div>
-    <div class="chat-messages" id="messages-area">
+    <div class="chat-messages" id="messages-area" style="flex:1;overflow-y:auto">
       ${msgs.length ? msgs.map(msg => `
-        <div class="msg ${msg.role === 'user' ? 'visitor' : 'bot'}">
+        <div class="msg ${msg.role === 'user' ? 'visitor' : msg.role === 'agent' ? 'agent' : 'bot'}">
           <div class="msg-bubble">${escHtml(msg.text || '')}</div>
-          <div class="msg-time">${msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+          <div class="msg-time">${msg.role === 'agent' ? '<span class="agent-label">You</span> · ' : ''}${msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
         </div>
       `).join('') : '<div class="empty-state"><div class="empty-state-desc">No messages in this chat.</div></div>'}
-    </div>`;
+    </div>
+    <div class="agent-reply-bar" id="agent-reply-bar">
+      <input
+        type="text"
+        id="agent-reply-input"
+        class="agent-reply-input"
+        placeholder="Reply to customer…"
+        autocomplete="off"
+        ${chat.status !== 'open' ? 'disabled' : ''}
+      >
+      <button
+        id="agent-reply-send"
+        class="agent-reply-send"
+        aria-label="Send reply"
+        ${chat.status !== 'open' ? 'disabled' : ''}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+    ${chat.status !== 'open' ? `<div style="text-align:center;font-size:.72rem;color:var(--text-muted);padding:6px 0 10px">This conversation is closed — reopen it to reply.</div>` : ''}`;
 
   // Bind chat actions
   const closeBtn = chatDetail.querySelector('[data-close-chat]');
@@ -147,9 +167,48 @@ function renderChatDetail(chatId) {
   const deleteBtn = chatDetail.querySelector('[data-delete-chat]');
   deleteBtn?.addEventListener('click', () => deleteChat(chatId));
 
+  // Bind agent reply input
+  const replyInput = document.getElementById('agent-reply-input');
+  const replySend  = document.getElementById('agent-reply-send');
+
+  if (replyInput && replySend) {
+    replySend.addEventListener('click', () => {
+      const text = replyInput.value.trim();
+      if (!text) return;
+      replyInput.value = '';
+      replyInput.focus();
+      sendAgentMessage(chatId, text);
+    });
+
+    replyInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const text = replyInput.value.trim();
+        if (!text) return;
+        replyInput.value = '';
+        sendAgentMessage(chatId, text);
+      }
+    });
+  }
+
   // Scroll to bottom
   const area = document.getElementById('messages-area');
   if (area) area.scrollTop = area.scrollHeight;
+}
+
+/* ── Send agent message to customer ───────────────────────── */
+async function sendAgentMessage(chatId, text) {
+  const db = firebase.database();
+  try {
+    await db.ref(`businesses/${currentUser.uid}/chats/${chatId}/messages`).push({
+      role:      'agent',
+      text:      text,
+      timestamp: firebase.database.ServerValue.TIMESTAMP
+    });
+    // loadChats listener will auto-refresh the detail
+  } catch (err) {
+    toast('Failed to send message.', 'error');
+  }
 }
 
 /* ── Actions ───────────────────────────────────────────────── */

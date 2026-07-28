@@ -95,7 +95,7 @@
         </div>
 
         <!-- Right panel — chat detail -->
-        <div id="chat-detail" style="flex:1;overflow-y:auto;display:flex;flex-direction:column">
+        <div id="chat-detail" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
           <div class="empty-state">
             <div class="empty-state-icon">💬</div>
             <div class="empty-state-title">Select a conversation</div>
@@ -116,6 +116,67 @@
   <script type="module" src="js/chats.js"></script>
 
   <style>
+    /* ── Agent reply bar ───────────────────────────────────────── */
+    .agent-reply-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--glass-border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    .agent-reply-input {
+      flex: 1;
+      background: var(--input-bg);
+      border: 1.5px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: .85rem;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color .15s, background .15s;
+      font-family: inherit;
+    }
+    .agent-reply-input:focus {
+      border-color: var(--primary);
+      background: var(--surface);
+    }
+    .agent-reply-input::placeholder { color: var(--text-muted); }
+    .agent-reply-input:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+    .agent-reply-send {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      background: var(--primary);
+      color: var(--text-on-primary);
+      border: none;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      transition: opacity .15s, transform .1s;
+    }
+    .agent-reply-send:hover:not(:disabled)  { opacity: .88; transform: scale(1.04); }
+    .agent-reply-send:active:not(:disabled) { transform: scale(.96); }
+    .agent-reply-send:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* Agent message bubble */
+    .msg.agent { justify-content: flex-end; }
+    .msg.agent .msg-bubble {
+      background: var(--primary);
+      color: var(--text-on-primary);
+      border-radius: 14px 14px 4px 14px;
+    }
+    .msg.agent .msg-time { text-align: right; }
+    .agent-label {
+      font-weight: 600;
+      color: var(--primary);
+      font-size: .7rem;
+    }
+
     @media (max-width: 768px) {
       #chat-list  { width: 100%; border-right: none; height: 260px; flex-shrink: 0; }
       .page-body  { flex-direction: column !important; height: auto !important; overflow: visible !important; }

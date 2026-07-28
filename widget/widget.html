@@ -106,6 +106,10 @@
     .bubble.bot    { align-self: flex-start; background: #ede9fe; color: var(--ink); border-top-left-radius: 4px; }
     .bubble.user   { align-self: flex-end;   background: var(--primary); color: #fff; border-top-right-radius: 4px; }
     .bubble.system { align-self: center; background: #f3f4f6; color: var(--muted); font-size: 11px; padding: 6px 12px; }
+    /* Agent messages (sent from the control panel) */
+    .agent-wrap    { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; max-width: 82%; gap: 3px; }
+    .bubble.agent  { background: #064e3b; color: #fff; border-top-right-radius: 4px; align-self: stretch; }
+    .agent-label   { font-size: 10px; color: var(--muted); padding-right: 2px; }
 
     /* Typing indicator */
     .typing {
@@ -204,19 +208,21 @@
 
     /* ── Widget state ─────────────────────────────────────────── */
     var state = {
-      open:             false,
-      loading:          true,
-      permissionError:  false,  // true when Firebase rules block anonymous reads
-      profile:          { name: 'Support', welcomeMessage: 'Hi! How can we help you today?', themeColor: '#7c3aed', chatTitle: '', logoUrl: '' },
-      faqs:             [],
-      messages:         [],
-      showLeadForm:     false,
-      leadCaptured:     false,
-      visitorId:        null,
-      chatId:           null,
-      msgCounter:       0,
-      profileReady:     false,
-      faqsReady:        false
+      open:              false,
+      loading:           true,
+      permissionError:   false,  // true when Firebase rules block anonymous reads
+      profile:           { name: 'Support', welcomeMessage: 'Hi! How can we help you today?', themeColor: '#7c3aed', chatTitle: '', logoUrl: '' },
+      faqs:              [],
+      messages:          [],
+      showLeadForm:      false,
+      leadCaptured:      false,
+      visitorId:         null,
+      chatId:            null,
+      msgCounter:        0,
+      profileReady:      false,
+      faqsReady:         false,
+      chatListening:     false,  // true once we have subscribed to chat messages
+      agentMsgKeys:      {}      // Firebase keys of agent messages already displayed
     };
 
     /* ── Visitor session ID ───────────────────────────────────── */
@@ -399,6 +405,12 @@
       var msgsHtml = state.loading
         ? '<div class="typing"><span></span><span></span><span></span></div>'
         : state.messages.map(function (m) {
+            if (m.role === 'agent') {
+              return '<div class="agent-wrap">' +
+                '<span class="agent-label">Support Agent</span>' +
+                '<div class="bubble agent">' + esc(m.text) + '</div>' +
+                '</div>';
+            }
             return '<div class="bubble ' + m.role + '">' + esc(m.text) + '</div>';
           }).join('');
 
@@ -562,11 +574,38 @@
             createdAt: firebase.database.ServerValue.TIMESTAMP,
             status:    'open'
           });
+          /* Start listening for agent replies as soon as a chat exists */
+          startListeningForAgentMessages();
         }
         var msgsRef = db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages');
         msgsRef.push({ role: 'user', text: userMsg, timestamp: firebase.database.ServerValue.TIMESTAMP });
         msgsRef.push({ role: 'bot',  text: botMsg,  timestamp: firebase.database.ServerValue.TIMESTAMP });
       } catch (e) { /* silent */ }
+    }
+
+    /* ── Listen for agent messages in real-time ───────────────── *
+     * Once a chat session exists, subscribe to child_added on its
+     * messages node.  We only act on messages with role === 'agent'
+     * (sent from the control panel) that we haven't shown yet.
+     * User and bot messages are already managed by local state, so
+     * we skip them to avoid duplicates.                            */
+    function startListeningForAgentMessages() {
+      if (state.chatListening || !state.chatId) return;
+      state.chatListening = true;
+
+      db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages')
+        .on('child_added', function (snap) {
+          var msg = snap.val();
+          var key = snap.key;
+          /* Only process agent messages we haven't shown yet */
+          if (!msg || msg.role !== 'agent') return;
+          if (state.agentMsgKeys[key]) return;
+          state.agentMsgKeys[key] = true;
+
+          state.messages.push({ role: 'agent', text: msg.text || '', id: ++state.msgCounter });
+          /* Re-render only when widget is open so we don't force-open it */
+          if (state.open) render();
+        });
     }
 
     /* ── Submit lead form ─────────────────────────────────────── */
