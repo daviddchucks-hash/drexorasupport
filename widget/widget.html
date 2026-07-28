@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Drexora Support</title>
   <style>
-    /* ── Reset ──────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; background: transparent; }
     body {
@@ -26,11 +25,10 @@
       --border:    #e5e7eb;
     }
 
-    /* ── Widget root — fixed to bottom-right of iframe ──────── */
+    /* ── Widget root ─────────────────────────────────────────── */
     #app {
       position: fixed;
-      right: 0;
-      bottom: 0;
+      right: 0; bottom: 0;
       width: min(370px, 100vw);
       display: flex;
       flex-direction: column;
@@ -39,24 +37,17 @@
 
     /* ── Launcher button ────────────────────────────────────── */
     .launcher {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 58px;
-      height: 58px;
+      display: flex; align-items: center; justify-content: center;
+      width: 58px; height: 58px;
       margin-bottom: 12px;
       border-radius: 18px;
       background: var(--primary);
-      color: #fff;
-      font-size: 22px;
+      color: #fff; font-size: 22px;
       box-shadow: 0 8px 28px rgba(0,0,0,.28);
       transition: transform .2s ease, box-shadow .2s ease;
       flex-shrink: 0;
     }
-    .launcher:hover {
-      transform: translateY(-2px) scale(1.04);
-      box-shadow: 0 12px 36px rgba(0,0,0,.32);
-    }
+    .launcher:hover  { transform: translateY(-2px) scale(1.04); box-shadow: 0 12px 36px rgba(0,0,0,.32); }
     .launcher:active { transform: scale(.97); }
 
     /* ── Chat panel ─────────────────────────────────────────── */
@@ -75,207 +66,113 @@
 
     /* Panel header */
     .panel-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+      display: flex; align-items: center; gap: 12px;
       padding: 16px 18px;
-      background: var(--primary);
-      color: #fff;
+      background: var(--primary); color: #fff;
     }
     .logo-wrap {
-      width: 40px; height: 40px;
-      border-radius: 12px;
+      width: 40px; height: 40px; border-radius: 12px;
       background: rgba(255,255,255,.2);
-      display: grid;
-      place-items: center;
-      font-size: 18px;
-      font-weight: 800;
-      flex-shrink: 0;
-      overflow: hidden;
+      display: grid; place-items: center;
+      font-size: 18px; font-weight: 800; flex-shrink: 0; overflow: hidden;
     }
     .logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
     .header-text { flex: 1; }
-    .header-title { font-size: 14px; font-weight: 700; }
+    .header-title  { font-size: 14px; font-weight: 700; }
     .header-status { font-size: 11px; opacity: .8; margin-top: 1px; }
     .header-close {
-      background: rgba(255,255,255,.15);
-      border-radius: 8px;
-      color: #fff;
-      width: 30px; height: 30px;
-      display: grid;
-      place-items: center;
-      font-size: 18px;
-      transition: background .15s;
+      background: rgba(255,255,255,.15); border-radius: 8px; color: #fff;
+      width: 30px; height: 30px; display: grid; place-items: center;
+      font-size: 18px; transition: background .15s;
     }
     .header-close:hover { background: rgba(255,255,255,.25); }
 
     /* Messages area */
     .messages {
-      max-height: 340px;
-      overflow-y: auto;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
+      max-height: 340px; overflow-y: auto;
+      padding: 16px; display: flex; flex-direction: column; gap: 10px;
       scroll-behavior: smooth;
     }
     .messages::-webkit-scrollbar { width: 4px; }
     .messages::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
 
-    /* Chat bubbles */
+    /* Bubbles */
     .bubble {
-      max-width: 82%;
-      padding: 10px 13px;
-      border-radius: 14px;
-      font-size: 13px;
-      line-height: 1.55;
+      max-width: 82%; padding: 10px 13px; border-radius: 14px;
+      font-size: 13px; line-height: 1.55;
       animation: bubbleIn .2s ease both;
     }
-    @keyframes bubbleIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    .bubble.bot {
-      align-self: flex-start;
-      background: #ede9fe;
-      color: var(--ink);
-      border-top-left-radius: 4px;
-    }
-    .bubble.user {
-      align-self: flex-end;
-      background: var(--primary);
-      color: #fff;
-      border-top-right-radius: 4px;
-    }
-    .bubble.system {
-      align-self: center;
-      background: #f3f4f6;
-      color: var(--muted);
-      font-size: 11px;
-      padding: 6px 12px;
-    }
+    @keyframes bubbleIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .bubble.bot    { align-self: flex-start; background: #ede9fe; color: var(--ink); border-top-left-radius: 4px; }
+    .bubble.user   { align-self: flex-end;   background: var(--primary); color: #fff; border-top-right-radius: 4px; }
+    .bubble.system { align-self: center; background: #f3f4f6; color: var(--muted); font-size: 11px; padding: 6px 12px; }
 
     /* Typing indicator */
     .typing {
-      align-self: flex-start;
-      display: flex;
-      gap: 4px;
-      padding: 12px 14px;
-      background: #ede9fe;
-      border-radius: 14px;
-      border-top-left-radius: 4px;
+      align-self: flex-start; display: flex; gap: 4px;
+      padding: 12px 14px; background: #ede9fe;
+      border-radius: 14px; border-top-left-radius: 4px;
     }
     .typing span {
-      width: 7px; height: 7px;
-      background: var(--primary);
-      border-radius: 50%;
+      width: 7px; height: 7px; background: var(--primary); border-radius: 50%;
       animation: bounce .8s ease infinite;
     }
     .typing span:nth-child(2) { animation-delay: .15s; }
     .typing span:nth-child(3) { animation-delay: .30s; }
-    @keyframes bounce {
-      0%, 100% { transform: translateY(0); opacity: .5; }
-      50%       { transform: translateY(-5px); opacity: 1; }
-    }
+    @keyframes bounce { 0%,100% { transform: translateY(0); opacity: .5; } 50% { transform: translateY(-5px); opacity: 1; } }
 
     /* Quick-reply chips */
-    .chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 0 16px 12px;
-    }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
     .chip {
-      padding: 8px 13px;
-      border: 1.5px solid var(--primary-l);
-      border-radius: 99px;
-      background: #fff;
-      color: var(--primary);
-      font-size: 12px;
-      font-weight: 600;
-      transition: all .15s;
-      white-space: nowrap;
+      padding: 8px 13px; border: 1.5px solid var(--primary-l);
+      border-radius: 99px; background: #fff; color: var(--primary);
+      font-size: 12px; font-weight: 600; transition: all .15s; white-space: nowrap;
     }
-    .chip:hover {
-      background: var(--primary);
-      color: #fff;
-      border-color: var(--primary);
-    }
+    .chip:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
 
     /* Input row */
     .input-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 14px;
-      border-top: 1px solid var(--border);
-      background: #fff;
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; border-top: 1px solid var(--border); background: #fff;
     }
     .chat-input {
-      flex: 1;
-      border: 1.5px solid var(--border);
-      border-radius: 10px;
-      padding: 9px 12px;
-      font-size: 13px;
-      color: var(--ink);
-      outline: none;
-      transition: border-color .15s;
-      background: #fafafa;
+      flex: 1; border: 1.5px solid var(--border); border-radius: 10px;
+      padding: 9px 12px; font-size: 13px; color: var(--ink);
+      outline: none; transition: border-color .15s; background: #fafafa;
     }
     .chat-input:focus { border-color: var(--primary-l); background: #fff; }
     .chat-input::placeholder { color: #9ca3af; }
     .send-btn {
-      width: 36px; height: 36px;
-      border-radius: 10px;
-      background: var(--primary);
-      color: #fff;
-      display: grid;
-      place-items: center;
-      flex-shrink: 0;
-      font-size: 16px;
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--primary); color: #fff;
+      display: grid; place-items: center; flex-shrink: 0; font-size: 16px;
       transition: opacity .15s;
     }
     .send-btn:disabled { opacity: .4; cursor: not-allowed; }
 
     /* Lead capture form */
     .lead-form {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding: 8px 16px 16px;
-      animation: riseIn .2s ease both;
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 8px 16px 16px; animation: riseIn .2s ease both;
     }
+    .lead-form-title { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
     .lead-input {
-      width: 100%;
-      border: 1.5px solid var(--border);
-      border-radius: 9px;
-      padding: 9px 12px;
-      font-size: 13px;
-      color: var(--ink);
-      background: #fafafa;
-      outline: none;
-      transition: border-color .15s;
+      width: 100%; border: 1.5px solid var(--border); border-radius: 9px;
+      padding: 9px 12px; font-size: 13px; color: var(--ink);
+      background: #fafafa; outline: none; transition: border-color .15s;
     }
     .lead-input:focus { border-color: var(--primary-l); background: #fff; }
     .lead-input::placeholder { color: #9ca3af; }
     .lead-submit {
-      padding: 10px;
-      background: var(--primary);
-      color: #fff;
-      border-radius: 9px;
-      font-size: 13px;
-      font-weight: 700;
-      transition: opacity .15s;
+      padding: 10px; background: var(--primary); color: #fff;
+      border-radius: 9px; font-size: 13px; font-weight: 700; transition: opacity .15s;
     }
     .lead-submit:hover { opacity: .9; }
 
     /* Panel footer */
     .panel-footer {
-      padding: 8px 14px;
-      border-top: 1px solid var(--border);
-      text-align: center;
-      font-size: 10px;
-      color: var(--muted);
+      padding: 8px 14px; border-top: 1px solid var(--border);
+      text-align: center; font-size: 10px; color: var(--muted);
     }
     .panel-footer a { color: var(--muted); text-decoration: none; }
   </style>
@@ -283,7 +180,6 @@
 <body>
   <div id="app"></div>
 
-  <!-- Firebase CDN — Realtime Database (no Firestore) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
@@ -291,7 +187,7 @@
   (function () {
     'use strict';
 
-    /* ── Firebase config ──────────────────────────────────── */
+    /* ── Firebase config ──────────────────────────────────────── */
     var FIREBASE_CONFIG = {
       apiKey:            'AIzaSyA1wX_0tastbk_hWfI0_cvuV9ZzoIKitL4',
       authDomain:        'drexorasupport.firebaseapp.com',
@@ -302,36 +198,37 @@
       databaseURL:       'https://drexorasupport-default-rtdb.firebaseio.com'
     };
 
-    /* ── Parse business ID from URL ────────────────────────── */
+    /* ── Parse business ID ────────────────────────────────────── */
     var businessId = new URLSearchParams(window.location.search).get('business');
     if (!businessId) { console.warn('[Drexora] No business ID.'); return; }
 
-    /* ── Widget state ──────────────────────────────────────── */
+    /* ── Widget state ─────────────────────────────────────────── */
     var state = {
-      open:       false,
-      loading:    true,
-      profile:    { name: 'Support', welcomeMessage: 'Hi! How can we help you today?', themeColor: '#7c3aed', chatTitle: '', logoUrl: '' },
-      faqs:       [],       // [{ question, answer }]
-      messages:   [],       // [{ role: 'bot'|'user', text, id }]
-      showLeadForm: false,
-      leadSaved:  false,
-      visitorId:  null,
-      chatId:     null,
-      msgCounter: 0
+      open:           false,
+      loading:        true,
+      profile:        { name: 'Support', welcomeMessage: 'Hi! How can we help you today?', themeColor: '#7c3aed', chatTitle: '', logoUrl: '' },
+      faqs:           [],
+      messages:       [],
+      showLeadForm:   false,
+      leadCaptured:   false,   // true once visitor has submitted their details — hides form but NEVER disables input
+      visitorId:      null,
+      chatId:         null,
+      msgCounter:     0,
+      faqsReady:      false    // true once first FAQ snapshot has arrived
     };
 
-    /* ── Visitor session ID ─────────────────────────────────── */
+    /* ── Visitor session ID ───────────────────────────────────── */
     state.visitorId = sessionStorage.getItem('drx_vid') || null;
     if (!state.visitorId) {
       state.visitorId = 'v_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
       sessionStorage.setItem('drx_vid', state.visitorId);
     }
 
-    /* ── Init Firebase ──────────────────────────────────────── */
+    /* ── Init Firebase ────────────────────────────────────────── */
     if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     var db = firebase.database();
 
-    /* ── Load business data from Realtime DB ────────────────── */
+    /* ── Load business profile (once) ────────────────────────── */
     db.ref('businesses/' + businessId + '/profile').once('value').then(function (snap) {
       if (snap.exists()) {
         var p = snap.val();
@@ -341,29 +238,46 @@
         state.profile.chatTitle      = p.chatTitle      || '';
         state.profile.logoUrl        = p.logoUrl        || '';
       }
-      return db.ref('businesses/' + businessId + '/faqs').once('value');
-    }).then(function (snap) {
+    }).catch(function (err) {
+      console.warn('[Drexora] Profile load error:', err);
+    });
+
+    /* ── Real-time FAQ listener ───────────────────────────────── *
+     * Uses .on('value') so the widget always has the latest FAQs
+     * without needing a page refresh — new FAQs added in the
+     * dashboard are reflected instantly in open widgets.           */
+    db.ref('businesses/' + businessId + '/faqs').on('value', function (snap) {
+      state.faqs = [];
       if (snap.exists()) {
         snap.forEach(function (child) {
           var faq = child.val();
-          if (faq.question && faq.answer) state.faqs.push({ question: faq.question, answer: faq.answer });
+          if (faq.question && faq.answer) {
+            state.faqs.push({ question: faq.question, answer: faq.answer });
+          }
         });
       }
-      state.loading = false;
-      render();
-    }).catch(function (err) {
-      console.error('[Drexora] Load error:', err);
-      state.loading = false;
-      render();
+      /* First snapshot: finish loading and do initial render */
+      if (!state.faqsReady) {
+        state.faqsReady = true;
+        state.loading   = false;
+        render();
+      }
+      /* Subsequent snapshots: no re-render (chat is in progress) */
+    }, function (err) {
+      console.warn('[Drexora] FAQ load error:', err);
+      if (!state.faqsReady) {
+        state.faqsReady = true;
+        state.loading   = false;
+        render();
+      }
     });
 
-    /* ── Render ──────────────────────────────────────────────── */
+    /* ── Render ───────────────────────────────────────────────── */
     var root = document.getElementById('app');
 
     function render() {
-      /* Apply theme colour */
       var c = state.profile.themeColor || '#7c3aed';
-      document.documentElement.style.setProperty('--primary', c);
+      document.documentElement.style.setProperty('--primary',   c);
       document.documentElement.style.setProperty('--primary-l', lighten(c));
 
       if (!state.open) {
@@ -376,15 +290,20 @@
       notify(true);
       root.innerHTML = panelHtml();
 
-      /* Bind panel events */
       document.getElementById('btn-close').onclick = closeWidget;
 
+      /* Wire chat input — always active, never disabled */
       var chatInput = document.getElementById('chat-input');
       var sendBtn   = document.getElementById('btn-send');
-
       if (chatInput && sendBtn) {
-        sendBtn.onclick = function () { sendMessage(chatInput.value); };
-        chatInput.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(chatInput.value); } };
+        sendBtn.onclick        = function () { sendMessage(chatInput.value); };
+        chatInput.onkeydown    = function (e) {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(chatInput.value); }
+        };
+        /* Re-focus input so mobile keyboard stays up after render */
+        if (document.activeElement && document.activeElement.id === 'chat-input') {
+          chatInput.focus();
+        }
       }
 
       /* Quick-reply chips */
@@ -396,36 +315,32 @@
       var leadForm = document.getElementById('lead-form');
       if (leadForm) leadForm.onsubmit = submitLead;
 
-      /* Scroll messages to bottom */
+      /* Scroll to bottom */
       var msgArea = document.getElementById('msg-area');
       if (msgArea) msgArea.scrollTop = msgArea.scrollHeight;
     }
 
-    /* ── Launcher HTML ───────────────────────────────────────── */
+    /* ── Launcher HTML ────────────────────────────────────────── */
     function launcherHtml() {
       return '<button id="btn-launcher" class="launcher" aria-label="Open support chat">💬</button>';
     }
 
-    /* ── Full panel HTML ─────────────────────────────────────── */
+    /* ── Panel HTML ───────────────────────────────────────────── */
     function panelHtml() {
       var title  = esc(state.profile.chatTitle || state.profile.name || 'Support');
       var logoEl = state.profile.logoUrl
         ? '<div class="logo-wrap"><img src="' + esc(state.profile.logoUrl) + '" alt="logo"></div>'
         : '<div class="logo-wrap">' + esc((state.profile.name || 'S').slice(0, 2).toUpperCase()) + '</div>';
 
-      /* Build messages HTML */
-      var msgsHtml = state.messages.map(function (m) {
-        return '<div class="bubble ' + m.role + '">' + esc(m.text) + '</div>';
-      }).join('');
+      var msgsHtml = state.loading
+        ? '<div class="typing"><span></span><span></span><span></span></div>'
+        : state.messages.map(function (m) {
+            return '<div class="bubble ' + m.role + '">' + esc(m.text) + '</div>';
+          }).join('');
 
-      if (state.loading) {
-        msgsHtml = '<div class="typing"><span></span><span></span><span></span></div>';
-      }
-
-      /* Welcome bubble (always first) */
       var welcomeHtml = '<div class="bubble bot">' + esc(state.profile.welcomeMessage) + '</div>';
 
-      /* Quick-reply chips (shown when no conversation yet) */
+      /* Chips only on empty conversation */
       var chipsHtml = '';
       if (!state.messages.length && !state.loading) {
         var presets = ['How can you help me?', 'What are your prices?', 'I have an issue'];
@@ -435,103 +350,163 @@
           }).join('') + '</div>';
       }
 
-      /* Lead form or chat input */
+      /* Input area:
+         - Show lead form if needed and not yet captured
+         - Otherwise ALWAYS show an active chat input (never disabled) */
       var inputHtml;
-      if (state.showLeadForm && !state.leadSaved) {
-        inputHtml = '<form id="lead-form" class="lead-form">' +
+      if (state.showLeadForm && !state.leadCaptured) {
+        inputHtml =
+          '<form id="lead-form" class="lead-form">' +
+          '<p class="lead-form-title">Leave your details and we\'ll be in touch:</p>' +
           '<input class="lead-input" name="visitorName" required placeholder="Your name">' +
-          '<input class="lead-input" name="email"       type="email" required placeholder="Email address">' +
-          '<input class="lead-input" name="phone"       placeholder="Phone number (optional)">' +
+          '<input class="lead-input" name="email" type="email" required placeholder="Email address">' +
+          '<input class="lead-input" name="phone" placeholder="Phone number (optional)">' +
           '<button type="submit" class="lead-submit">Send my details →</button>' +
           '</form>';
       } else {
-        inputHtml = '<div class="input-row">' +
-          '<input id="chat-input" class="chat-input" type="text" placeholder="Type a message…" autocomplete="off" ' +
-          (state.leadSaved ? 'disabled' : '') + '>' +
-          '<button id="btn-send" class="send-btn" ' + (state.leadSaved ? 'disabled' : '') + '>➤</button>' +
+        /* Input is ALWAYS enabled — visitors can keep chatting */
+        inputHtml =
+          '<div class="input-row">' +
+          '<input id="chat-input" class="chat-input" type="text" placeholder="Type a message…" autocomplete="off">' +
+          '<button id="btn-send" class="send-btn" aria-label="Send">➤</button>' +
           '</div>';
       }
 
       return '<div class="panel">' +
         '<div class="panel-header">' + logoEl +
-        '<div class="header-text"><div class="header-title">' + title + '</div>' +
-        '<div class="header-status">✅ Online · Usually replies instantly</div></div>' +
+        '<div class="header-text">' +
+        '<div class="header-title">' + title + '</div>' +
+        '<div class="header-status">✅ Online · Usually replies instantly</div>' +
+        '</div>' +
         '<button id="btn-close" class="header-close" aria-label="Close">×</button>' +
         '</div>' +
         '<div class="messages" id="msg-area">' + welcomeHtml + msgsHtml + '</div>' +
         chipsHtml + inputHtml +
         '<div class="panel-footer">Powered by <a href="https://daviddchucks-hash.github.io/drexorasupport/" target="_blank">Drexora Support</a></div>' +
         '</div>' +
-        '<button id="btn-launcher" class="launcher" style="margin-top:10px" aria-label="Close support chat" onclick="closeWidget()">×</button>';
+        '<button id="btn-launcher" class="launcher" style="margin-top:10px" aria-label="Close support chat">×</button>';
     }
 
-    /* ── Handle a sent message ───────────────────────────────── */
+    /* ── FAQ matching ─────────────────────────────────────────── *
+     * Bidirectional keyword search:
+     *   1. Do words from the FAQ question appear in the visitor's message?
+     *   2. Do words from the visitor's message appear in the FAQ question?
+     * Uses words of 3+ characters so short stop-words don't fire.
+     * Returns the FAQ with the highest combined score, or null.      */
+    function findFaqMatch(text) {
+      if (!state.faqs.length) return null;
+
+      var STOP = { 'the':1,'and':1,'for':1,'are':1,'but':1,'not':1,'you':1,'all':1,'can':1,'her':1,'was':1,'one':1,'our':1,'out':1,'had':1,'has':1,'his':1,'how':1,'its':1,'may':1,'new':1,'now':1,'old':1,'see':1,'two':1,'way':1,'who':1,'did':1,'get':1,'use':1,'has':1,'him':1,'let':1,'put':1,'too':1,'why':1,'did':1,'got':1 };
+
+      function keywords(str) {
+        return str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(function (w) {
+          return w.length >= 3 && !STOP[w];
+        });
+      }
+
+      var userWords = keywords(text);
+      if (!userWords.length) return null;
+
+      var best = null, bestScore = 0;
+
+      for (var i = 0; i < state.faqs.length; i++) {
+        var qWords = keywords(state.faqs[i].question || '');
+        var aWords = keywords(state.faqs[i].answer   || '');
+        var score  = 0;
+
+        /* How many FAQ question words appear in the user message? */
+        qWords.forEach(function (w) { if (text.toLowerCase().includes(w)) score += 2; });
+
+        /* How many user words appear in the FAQ question? */
+        userWords.forEach(function (w) {
+          if ((state.faqs[i].question || '').toLowerCase().includes(w)) score += 2;
+        });
+
+        /* Bonus: user words appearing in the answer too */
+        userWords.forEach(function (w) {
+          if ((state.faqs[i].answer || '').toLowerCase().includes(w)) score += 1;
+        });
+
+        if (score > 0 && score > bestScore) {
+          bestScore = score;
+          best = state.faqs[i];
+        }
+      }
+
+      /* Require at least a score of 2 to avoid very weak matches */
+      return bestScore >= 2 ? best : null;
+    }
+
+    /* ── Send a message ───────────────────────────────────────── */
     function sendMessage(text) {
       text = (text || '').trim();
       if (!text) return;
 
-      var input = document.getElementById('chat-input');
-      if (input) input.value = '';
+      /* Clear input immediately */
+      var inputEl = document.getElementById('chat-input');
+      if (inputEl) inputEl.value = '';
 
       state.messages.push({ role: 'user', text: text, id: ++state.msgCounter });
-      state.messages.push({ role: 'bot',  text: '…typing', id: ++state.msgCounter, typing: true });
+      state.messages.push({ role: 'bot',  text: '…', id: ++state.msgCounter, typing: true });
       render();
 
-      /* Small artificial delay for a natural feel */
       setTimeout(function () {
-        /* Remove typing indicator */
         state.messages = state.messages.filter(function (m) { return !m.typing; });
 
-        /* Search FAQs */
-        var norm  = text.toLowerCase();
-        var match = null;
-        for (var i = 0; i < state.faqs.length; i++) {
-          var q     = (state.faqs[i].question || '').toLowerCase();
-          var words = q.split(/\s+/).slice(0, 4);
-          var hits  = words.filter(function (w) { return w.length > 2 && norm.includes(w); });
-          if (hits.length >= Math.min(2, words.length)) { match = state.faqs[i]; break; }
-        }
+        var match = findFaqMatch(text);
 
         if (match) {
-          /* FAQ answer found */
           state.messages.push({ role: 'bot', text: match.answer, id: ++state.msgCounter });
           saveChat(text, match.answer);
-        } else {
-          /* No match — ask for contact details */
+          state.showLeadForm = false;
+        } else if (!state.leadCaptured) {
+          /* No match and we don't have their details yet — ask for them */
           state.messages.push({
             role: 'bot',
-            text: "I couldn't find that information in our knowledge base. Please leave your name, email and phone number and our team will contact you shortly.",
+            text: "I couldn't find a direct answer to that. Please share your name, email and phone number below and our team will contact you shortly.",
             id: ++state.msgCounter
           });
           state.showLeadForm = true;
-          saveChat(text, "I couldn't find that information.");
+          saveChat(text, "Couldn't find a FAQ match.");
+        } else {
+          /* We already have their details — just acknowledge */
+          state.messages.push({
+            role: 'bot',
+            text: "Thanks for reaching out! Our team already has your details and will follow up with you soon.",
+            id: ++state.msgCounter
+          });
+          saveChat(text, "Team follow-up needed.");
         }
+
         render();
       }, 900);
     }
 
-    /* ── Save chat to Realtime DB ────────────────────────────── */
+    /* ── Save chat to Realtime DB ─────────────────────────────── */
     function saveChat(userMsg, botMsg) {
       try {
         if (!state.chatId) {
           var chatRef = db.ref('businesses/' + businessId + '/chats').push();
           state.chatId = chatRef.key;
-          chatRef.set({ visitorId: state.visitorId, createdAt: firebase.database.ServerValue.TIMESTAMP, status: 'open' });
+          chatRef.set({
+            visitorId: state.visitorId,
+            createdAt: firebase.database.ServerValue.TIMESTAMP,
+            status:    'open'
+          });
         }
         var msgsRef = db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages');
         msgsRef.push({ role: 'user', text: userMsg, timestamp: firebase.database.ServerValue.TIMESTAMP });
         msgsRef.push({ role: 'bot',  text: botMsg,  timestamp: firebase.database.ServerValue.TIMESTAMP });
-      } catch (e) { /* silent — don't break the widget */ }
+      } catch (e) { /* silent */ }
     }
 
-    /* ── Submit lead form ────────────────────────────────────── */
+    /* ── Submit lead form ─────────────────────────────────────── */
     function submitLead(e) {
       e.preventDefault();
       var form        = e.target;
       var visitorName = (form.visitorName.value || '').trim();
       var email       = (form.email.value       || '').trim();
       var phone       = (form.phone.value        || '').trim();
-
       if (!visitorName || !email) return;
 
       var lastUserMsg = '';
@@ -539,7 +514,6 @@
         if (state.messages[i].role === 'user') { lastUserMsg = state.messages[i].text; break; }
       }
 
-      /* Write lead to Realtime DB */
       try {
         db.ref('businesses/' + businessId + '/leads').push({
           visitorName: visitorName,
@@ -553,49 +527,44 @@
         });
       } catch (err) { /* silent */ }
 
+      /* Mark captured — hides the form but NEVER disables the input */
       state.showLeadForm = false;
-      state.leadSaved    = true;
+      state.leadCaptured = true;
+
       state.messages.push({
         role: 'bot',
-        text: 'Thanks, ' + visitorName + '! Your details have been passed to our team. Someone will be in touch soon.',
+        text: 'Thanks, ' + esc(visitorName) + '! Your details have been received. Our team will be in touch shortly. Feel free to keep chatting!',
         id: ++state.msgCounter
       });
       render();
     }
 
-    /* ── Open / close ────────────────────────────────────────── */
+    /* ── Open / close ─────────────────────────────────────────── */
     function openWidget()  { state.open = true;  render(); }
     function closeWidget() { state.open = false; render(); }
-
-    /* Expose closeWidget for the inline onclick in panelHtml */
     window.closeWidget = closeWidget;
 
-    /* ── postMessage parent with new height ──────────────────── */
+    /* ── postMessage height to parent ────────────────────────── */
     function notify(open) {
-      try {
-        window.parent.postMessage({ type: 'drexora-resize', open: open }, '*');
-      } catch (e) {}
+      try { window.parent.postMessage({ type: 'drexora-resize', open: open }, '*'); } catch (e) {}
     }
 
-    /* ── Helpers ─────────────────────────────────────────────── */
+    /* ── Helpers ──────────────────────────────────────────────── */
     function esc(str) {
       return String(str || '').replace(/[&<>"']/g, function (c) {
-        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[c];
+        return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' })[c];
       });
     }
 
-    /* Very simple hex colour lightener for --primary-l */
     function lighten(hex) {
       try {
-        var r = parseInt(hex.slice(1, 3), 16);
-        var g = parseInt(hex.slice(3, 5), 16);
-        var b = parseInt(hex.slice(5, 7), 16);
-        r = Math.min(255, r + 60); g = Math.min(255, g + 60); b = Math.min(255, b + 60);
-        return '#' + [r,g,b].map(function (v) { return v.toString(16).padStart(2,'0'); }).join('');
-      } catch (e) { return '#a78bfa'; }
+        var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+        r = Math.min(255,r+60); g = Math.min(255,g+60); b = Math.min(255,b+60);
+        return '#' + [r,g,b].map(function(v){return v.toString(16).padStart(2,'0');}).join('');
+      } catch(e) { return '#a78bfa'; }
     }
 
-    /* ── Initial render ──────────────────────────────────────── */
+    /* ── Initial render (shows launcher immediately) ─────────── */
     render();
 
   }());
