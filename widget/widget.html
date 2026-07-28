@@ -339,14 +339,21 @@
       historyPending:    false
     };
 
-    /* ── Persistent visitor ID + chat ID ─────────────────────── */
-    var VID_KEY = 'drx_vid_' + businessId;
-    var CID_KEY = 'drx_cid_' + businessId;
+    /* ── Persistent visitor ID + chat ID + lead-captured flag ── */
+    var VID_KEY  = 'drx_vid_'  + businessId;
+    var CID_KEY  = 'drx_cid_'  + businessId;
+    var LEAD_KEY = 'drx_lead_' + businessId;   /* set only after submitLead */
 
     state.visitorId = localStorage.getItem(VID_KEY) || null;
     if (!state.visitorId) {
       state.visitorId = 'v_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
       localStorage.setItem(VID_KEY, state.visitorId);
+    }
+
+    /* Restore lead-captured flag so we never ask for details twice,
+       even across page refreshes. */
+    if (localStorage.getItem(LEAD_KEY) === '1') {
+      state.leadCaptured = true;
     }
 
     var savedChatId = localStorage.getItem(CID_KEY) || null;
@@ -432,8 +439,11 @@
             msgs.push({ role: msg.role || 'bot', text: msg.text, id: ++state.msgCounter });
             if (msg.role === 'agent') state.agentMsgKeys[child.key] = true;
           });
-          state.messages     = msgs;
-          state.leadCaptured = true;
+          state.messages = msgs;
+          /* leadCaptured is driven by the LEAD_KEY localStorage flag (set
+             only when the visitor actually submits the lead form).  We do
+             NOT override it here so we never falsely mark someone as having
+             submitted when they only had a FAQ-only chat. */
           startListeningForAgentMessages();
           done();
         }, function () { done(); });
@@ -442,6 +452,7 @@
     /* ── Clear conversation ───────────────────────────────────── */
     function clearConversation() {
       localStorage.removeItem(CID_KEY);
+      localStorage.removeItem(LEAD_KEY);   /* visitor can be re-asked on a fresh chat */
       if (state.chatId) {
         try { db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages').off(); } catch (e) {}
       }
@@ -794,32 +805,59 @@
 
     /* ════════════════════════════════════════════════════════════
        FAQ MATCHING
+       Matches user input against stored FAQ questions/answers.
+       Works regardless of whether a lead has been captured — FAQ
+       answers are always shown when a match is found.
     ════════════════════════════════════════════════════════════ */
     function findFaqMatch(text) {
       if (!state.faqs.length) return null;
 
-      var STOP = { 'the':1,'and':1,'for':1,'are':1,'but':1,'not':1,'you':1,'all':1,'can':1,'her':1,'was':1,'one':1,'our':1,'out':1,'had':1,'has':1,'his':1,'how':1,'its':1,'may':1,'new':1,'now':1,'old':1,'see':1,'two':1,'way':1,'who':1,'did':1,'get':1,'use':1,'him':1,'let':1,'put':1,'too':1,'why':1,'got':1 };
+      var lc = text.toLowerCase().trim();
+
+      /* Trivially short / greeting-only messages — skip FAQ matching */
+      if (lc.length < 2) return null;
+
+      var STOP = { 'the':1,'and':1,'for':1,'are':1,'but':1,'not':1,'you':1,'all':1,'can':1,'her':1,'was':1,'one':1,'our':1,'out':1,'had':1,'has':1,'his':1,'how':1,'its':1,'may':1,'new':1,'now':1,'old':1,'see':1,'two':1,'way':1,'who':1,'did':1,'get':1,'use':1,'him':1,'let':1,'put':1,'too':1,'why':1,'got':1,'what':1,'this':1,'that':1,'with':1,'from':1,'they':1,'have':1,'been':1,'will':1,'when':1,'your':1,'just':1,'also':1,'more':1,'some':1,'then':1,'than':1,'into':1,'over':1,'like':1,'does':1,'here':1,'tell':1,'give':1,'want':1 };
 
       function keywords(str) {
         return str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(function (w) {
-          return w.length >= 3 && !STOP[w];
+          return w.length >= 2 && !STOP[w];
         });
       }
 
       var userWords = keywords(text);
-      if (!userWords.length) return null;
+      /* If all words were filtered out, try with the full lowercased string
+         as a single keyword (handles single-word queries like "pricing") */
+      if (!userWords.length) {
+        var bare = lc.replace(/[^a-z0-9]/g, '');
+        if (bare.length >= 2) userWords = [bare];
+        else return null;
+      }
 
       var best = null, bestScore = 0;
       for (var i = 0; i < state.faqs.length; i++) {
-        var qWords = keywords(state.faqs[i].question || '');
+        var faq    = state.faqs[i];
+        var qLc    = (faq.question || '').toLowerCase();
+        var aLc    = (faq.answer   || '').toLowerCase();
+        var qWords = keywords(faq.question || '');
         var score  = 0;
-        qWords.forEach(function (w) { if (text.toLowerCase().includes(w)) score += 2; });
+
+        /* Exact question substring match — high reward */
+        if (qLc.includes(lc) || lc.includes(qLc)) score += 8;
+
+        /* Keyword overlap: FAQ question words found in user text */
+        qWords.forEach(function (w) { if (lc.includes(w)) score += 2; });
+
+        /* Keyword overlap: user words found in FAQ question or answer */
         userWords.forEach(function (w) {
-          if ((state.faqs[i].question || '').toLowerCase().includes(w)) score += 2;
-          if ((state.faqs[i].answer   || '').toLowerCase().includes(w)) score += 1;
+          if (qLc.includes(w)) score += 2;
+          if (aLc.includes(w)) score += 1;
         });
-        if (score > 0 && score > bestScore) { bestScore = score; best = state.faqs[i]; }
+
+        if (score > 0 && score > bestScore) { bestScore = score; best = faq; }
       }
+
+      /* Threshold = 2 so even a single meaningful keyword triggers a match */
       return bestScore >= 2 ? best : null;
     }
 
@@ -843,11 +881,14 @@
       setTimeout(function () {
         state.messages = state.messages.filter(function (m) { return !m.typing; });
 
+        /* ── 1. Always try FAQ first, regardless of leadCaptured ── */
         var match = findFaqMatch(text);
         if (match) {
           state.messages.push({ role: 'bot', text: match.answer, id: ++state.msgCounter });
           saveChat(text, match.answer);
           state.showLeadForm = false;
+
+        /* ── 2. No FAQ match + haven't collected lead yet → ask ── */
         } else if (!state.leadCaptured) {
           state.messages.push({
             role: 'bot',
@@ -856,14 +897,17 @@
           });
           state.showLeadForm = true;
           saveChat(text, "Couldn't find a FAQ match — requesting lead details.");
+
+        /* ── 3. No FAQ match + lead already captured → acknowledge ── */
         } else {
           state.messages.push({
             role: 'bot',
-            text: "Thanks for reaching out! Our team already has your details and will follow up with you soon.",
+            text: "Got your message! A member of our team will follow up with you shortly.",
             id: ++state.msgCounter
           });
-          saveChat(text, "Team follow-up needed.");
+          saveChat(text, "Post-lead follow-up message.");
         }
+
         render(); /* → patchPanel() again — only dynamic sections updated */
       }, 900);
     }
@@ -940,6 +984,7 @@
 
       state.showLeadForm = false;
       state.leadCaptured = true;
+      localStorage.setItem(LEAD_KEY, '1');   /* persist across page refreshes */
 
       if (state.chatId) {
         try {
