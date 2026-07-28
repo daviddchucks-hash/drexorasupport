@@ -69,6 +69,14 @@ requireAuth(async (user, wid) => {
   currentUser  = user;
   workspaceUid = wid;
   userRole     = await getCurrentUserRole();
+
+  /* ── Access guard: agents and viewers are redirected away.
+        Team management is owner / admin only.                   ── */
+  if (['agent', 'viewer'].includes(userRole)) {
+    window.location.replace('workspace.html');
+    return;
+  }
+
   userRec      = await getUserRecord();
   db           = firebase.database();
   setupSidebar(user);

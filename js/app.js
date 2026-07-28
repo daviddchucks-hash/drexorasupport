@@ -334,17 +334,28 @@ function _applyRoleRestrictions(role) {
   const isTeamMember = role === 'agent' || role === 'viewer';
   if (!isTeamMember) return; // owners and admins see everything
 
-  // ── Team page: hide "Invite Teammate" button ──────────────
-  const inviteBtn = document.getElementById('invite-btn');
-  if (inviteBtn) inviteBtn.style.display = 'none';
+  /* ── Redirect immediately if the user somehow landed on a
+        restricted page (direct URL, bookmark, back-button, etc.) ── */
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+  if (['team.html', 'tickets.html'].includes(currentPage)) {
+    window.location.replace('workspace.html');
+    return; // stop further execution — the page is changing
+  }
 
-  // ── Settings page: hide widget install code + workspace settings ──
-  const installCard  = document.getElementById('install-code-card');
-  const wsCard       = document.getElementById('workspace-settings-card');
-  const faqCard      = document.getElementById('faq-manager-card');
+  /* ── Remove Team and Tickets from the sidebar nav entirely ──
+        .remove() ensures the links are gone from the DOM, not just
+        hidden, so a CSS inspector can't reveal them either.         */
+  document.querySelector('.nav-item[href="team.html"]')?.remove();
+  document.querySelector('.nav-item[href="tickets.html"]')?.remove();
+
+  /* ── Settings page: hide widget install code and workspace
+        settings section — agents never need those controls         ── */
+  const installCard = document.getElementById('install-code-card');
+  const wsCard      = document.getElementById('workspace-settings-card');
+  const faqCard     = document.getElementById('faq-manager-card');
   if (installCard) installCard.style.display = 'none';
   if (wsCard)      wsCard.style.display      = 'none';
-  // Viewers also hide FAQ manager (read-only)
+  // Viewers also cannot edit FAQs
   if (role === 'viewer' && faqCard) faqCard.style.display = 'none';
 }
 

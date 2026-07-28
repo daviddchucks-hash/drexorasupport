@@ -16,11 +16,11 @@
         /* Profile and FAQs are publicly readable (needed by the widget) */
         "profile": {
           ".read":  true,
-          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+          ".write": "auth != null && (auth.uid === $businessUid || (root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid && (root.child('userWorkspace').child(auth.uid).child('role').val() === 'owner' || root.child('userWorkspace').child(auth.uid).child('role').val() === 'admin')))"
         },
         "faqs": {
           ".read":  true,
-          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+          ".write": "auth != null && (auth.uid === $businessUid || (root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid && (root.child('userWorkspace').child(auth.uid).child('role').val() === 'owner' || root.child('userWorkspace').child(auth.uid).child('role').val() === 'admin')))"
         },
 
         /* Chats: public write (widget visitors), workspace-member read */
@@ -39,30 +39,38 @@
           ".write": true
         },
 
-        /* Tickets: workspace members */
+        /* Tickets: all workspace members can read (agents see their assigned
+           tickets in Workspace > My Queue) but only owner/admin/agent can
+           write — viewers are read-only.                                      */
         "tickets": {
           ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
-          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+          ".write": "auth != null && (auth.uid === $businessUid || (root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid && root.child('userWorkspace').child(auth.uid).child('role').val() !== 'viewer'))"
         },
 
         "ticketCounter": {
           ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
-          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+          ".write": "auth != null && (auth.uid === $businessUid || (root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid && root.child('userWorkspace').child(auth.uid).child('role').val() !== 'viewer'))"
         },
 
-        /* Team members: workspace members can read, owner/admin can write */
+        /* Team members: all workspace members can read (needed for dropdowns
+           and workspace board), but only owner/admin can manage the team.
+           Each member can update their own record for presence (status,
+           lastActive) even if they are a plain agent.                         */
         "team": {
           "members": {
             ".read": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
-            ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+            ".write": "auth != null && (auth.uid === $businessUid || (root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid && (root.child('userWorkspace').child(auth.uid).child('role').val() === 'owner' || root.child('userWorkspace').child(auth.uid).child('role').val() === 'admin')))",
             "$memberId": {
               ".read":  "auth != null && (auth.uid === $businessUid || auth.uid === $memberId || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
-              ".write": "auth != null && (auth.uid === $businessUid || auth.uid === $memberId || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+              /* Owner/admin can manage any member; a member can update their
+                 own record (presence: status, lastActive, photoUrl).          */
+              ".write": "auth != null && (auth.uid === $businessUid || auth.uid === $memberId || (root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid && (root.child('userWorkspace').child(auth.uid).child('role').val() === 'owner' || root.child('userWorkspace').child(auth.uid).child('role').val() === 'admin')))"
             }
           },
+          /* Invitations: only owner/admin can send or revoke invitations      */
           "invitations": {
             ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
-            ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+            ".write": "auth != null && (auth.uid === $businessUid || (root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid && (root.child('userWorkspace').child(auth.uid).child('role').val() === 'owner' || root.child('userWorkspace').child(auth.uid).child('role').val() === 'admin')))",
             "$inviteId": {
               ".read":  "auth != null",
               ".write": "auth != null"
@@ -70,10 +78,11 @@
           }
         },
 
-        /* Settings: workspace members */
+        /* Settings: only owner/admin can change workspace configuration.
+           Agents and viewers have no legitimate reason to write settings.     */
         "settings": {
           ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
-          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+          ".write": "auth != null && (auth.uid === $businessUid || (root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid && (root.child('userWorkspace').child(auth.uid).child('role').val() === 'owner' || root.child('userWorkspace').child(auth.uid).child('role').val() === 'admin')))"
         },
 
         /* Activity log: workspace members */
