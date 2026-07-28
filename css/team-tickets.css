@@ -3,6 +3,10 @@
    Supplement to styles.css
    ============================================================ */
 
+/* ── Content wrapper (team / tickets pages) ─────────────────── */
+.content-wrap { padding: 28px 32px; flex: 1; }
+@media (max-width: 768px) { .content-wrap { padding: 18px; } }
+
 /* ── Shared utilities ───────────────────────────────────────── */
 .text-muted { color: var(--text-muted); font-size: .875rem; }
 .req { color: var(--danger); }

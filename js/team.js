@@ -236,7 +236,7 @@ function renderInvitations() {
 /* ── Incoming invitations (sent TO this user by other workspaces) ───── */
 async function loadIncomingInvitations() {
   try {
-    const encodedEmail = currentUser.email.replace(/./g, ',');
+    const encodedEmail = currentUser.email.replace(/\./g, ',');
     // Live listener so new invites appear without a page refresh
     db.ref('pendingInvitations/' + encodedEmail).on('value', async snap => {
       const raw = snap.val() || {};
@@ -312,7 +312,7 @@ window.acceptIncomingInvitation = async function(inviteKey, businessUid, busines
   btn.disabled    = true;
   btn.textContent = 'Joining…';
   try {
-    const encodedEmail = currentUser.email.replace(/./g, ',');
+    const encodedEmail = currentUser.email.replace(/\./g, ',');
 
     // 1. Add user to the business team/members.
     //    Rule: auth.uid === $memberId allows invited users to write their own record.
@@ -352,7 +352,7 @@ window.declineIncomingInvitation = async function(inviteKey, btn) {
   if (!confirm('Decline this invitation?')) return;
   btn.disabled = true;
   try {
-    const encodedEmail = currentUser.email.replace(/./g, ',');
+    const encodedEmail = currentUser.email.replace(/\./g, ',');
     await db.ref('pendingInvitations/' + encodedEmail + '/' + inviteKey).remove();
     toast('Invitation declined.', 'info');
   } catch (err) {
