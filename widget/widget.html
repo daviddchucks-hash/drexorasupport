@@ -179,6 +179,12 @@
       text-align: center; font-size: 10px; color: var(--muted);
     }
     .panel-footer a { color: var(--muted); text-decoration: none; }
+    .footer-new-chat {
+      background: none; border: none; padding: 0;
+      font-size: 10px; color: var(--muted);
+      cursor: pointer; text-decoration: underline; font-family: inherit;
+    }
+    .footer-new-chat:hover { color: var(--primary); }
   </style>
 </head>
 <body>
@@ -222,14 +228,28 @@
       profileReady:      false,
       faqsReady:         false,
       chatListening:     false,  // true once we have subscribed to chat messages
-      agentMsgKeys:      {}      // Firebase keys of agent messages already displayed
+      agentMsgKeys:      {},     // Firebase keys of agent messages already displayed
+      historyPending:    false   // true when we need to load prior messages before first render
     };
 
-    /* ── Visitor session ID ───────────────────────────────────── */
-    state.visitorId = sessionStorage.getItem('drx_vid') || null;
+    /* ── Persistent visitor ID + chat ID ─────────────────────── *
+     * Use localStorage (not sessionStorage) so identity and chat
+     * survive page reloads.  Keys are scoped to businessId so a
+     * visitor on two different sites using Drexora won't share state. */
+    var VID_KEY = 'drx_vid_' + businessId;
+    var CID_KEY = 'drx_cid_' + businessId;
+
+    state.visitorId = localStorage.getItem(VID_KEY) || null;
     if (!state.visitorId) {
       state.visitorId = 'v_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-      sessionStorage.setItem('drx_vid', state.visitorId);
+      localStorage.setItem(VID_KEY, state.visitorId);
+    }
+
+    /* Restore previous chat session if one exists */
+    var savedChatId = localStorage.getItem(CID_KEY) || null;
+    if (savedChatId) {
+      state.chatId          = savedChatId;
+      state.historyPending  = true;  // signals tryInitialRender to load history first
     }
 
     /* ── Init Firebase ────────────────────────────────────────── */
@@ -309,12 +329,78 @@
     /* ── Coordinate initial render ────────────────────────────── *
      * Wait for both profile and FAQs to arrive before showing the
      * widget for the first time, so the visitor always sees the
-     * correct branding and never a flash of default values.        */
+     * correct branding and never a flash of default values.
+     * If a previous chat session exists, restore its history from
+     * Firebase before marking loading as done.                     */
     function tryInitialRender() {
-      if (state.profileReady && state.faqsReady) {
+      if (!state.profileReady || !state.faqsReady) return;
+
+      if (state.historyPending) {
+        /* Load existing messages then finish init */
+        restoreChat(state.chatId, function () {
+          state.historyPending = false;
+          state.loading = false;
+          render();
+        });
+      } else {
         state.loading = false;
         render();
       }
+    }
+
+    /* ── Restore a previous chat from Firebase ────────────────── *
+     * Called once on load when localStorage has a chatId.
+     * Fetches all messages with .once() so we get the full history,
+     * then starts the real-time listener for new agent replies.    */
+    function restoreChat(chatId, done) {
+      db.ref('businesses/' + businessId + '/chats/' + chatId + '/messages')
+        .once('value', function (snap) {
+          if (!snap.exists()) {
+            /* Chat was deleted on the server — clear stale local state */
+            localStorage.removeItem(CID_KEY);
+            state.chatId = null;
+            done();
+            return;
+          }
+
+          var msgs = [];
+          snap.forEach(function (child) {
+            var msg = child.val();
+            if (!msg || !msg.text) return;
+            msgs.push({ role: msg.role || 'bot', text: msg.text, id: ++state.msgCounter });
+            /* Pre-register agent message keys so the listener won't re-add them */
+            if (msg.role === 'agent') state.agentMsgKeys[child.key] = true;
+          });
+
+          state.messages     = msgs;
+          state.leadCaptured = true;  // don't re-show the lead form on restore
+
+          /* Start real-time listener for new agent replies */
+          startListeningForAgentMessages();
+          done();
+        }, function (/* err */) {
+          /* Permission error or network failure — treat as no history */
+          done();
+        });
+    }
+
+    /* ── Clear conversation (user-initiated) ─────────────────── */
+    function clearConversation() {
+      localStorage.removeItem(CID_KEY);
+      /* Stop the current chat listener */
+      if (state.chatId) {
+        try {
+          db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages').off();
+        } catch (e) { /* silent */ }
+      }
+      state.chatId        = null;
+      state.chatListening = false;
+      state.messages      = [];
+      state.agentMsgKeys  = {};
+      state.showLeadForm  = false;
+      state.leadCaptured  = false;
+      state.msgCounter    = 0;
+      render();
     }
 
     /* ── Render ───────────────────────────────────────────────── */
@@ -359,6 +445,14 @@
       /* Lead form */
       var leadForm = document.getElementById('lead-form');
       if (leadForm) leadForm.onsubmit = submitLead;
+
+      /* New conversation button */
+      var newChatBtn = document.getElementById('btn-new-chat');
+      if (newChatBtn) newChatBtn.onclick = function () {
+        if (confirm('Start a new conversation? Your current chat history will be cleared.')) {
+          clearConversation();
+        }
+      };
 
       /* Scroll to bottom */
       var msgArea = document.getElementById('msg-area');
@@ -463,7 +557,9 @@
         '</div>' +
         '<div class="messages" id="msg-area">' + welcomeHtml + msgsHtml + '</div>' +
         chipsHtml + inputHtml +
-        '<div class="panel-footer">Powered by <a href="https://daviddchucks-hash.github.io/drexorasupport/" target="_blank">Drexora Support</a></div>' +
+        '<div class="panel-footer">Powered by <a href="https://daviddchucks-hash.github.io/drexorasupport/" target="_blank">Drexora Support</a>' +
+        (state.messages.length ? ' &nbsp;·&nbsp; <button id="btn-new-chat" class="footer-new-chat">New conversation</button>' : '') +
+        '</div>' +
         '</div>' +
         '<button id="btn-launcher" class="launcher" style="margin-top:10px" aria-label="Close support chat">×</button>';
     }
@@ -569,6 +665,8 @@
         if (!state.chatId) {
           var chatRef = db.ref('businesses/' + businessId + '/chats').push();
           state.chatId = chatRef.key;
+          /* Persist so the conversation survives a page reload */
+          localStorage.setItem(CID_KEY, state.chatId);
           chatRef.set({
             visitorId: state.visitorId,
             createdAt: firebase.database.ServerValue.TIMESTAMP,
