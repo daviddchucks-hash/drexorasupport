@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workspace — Drexora Support</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css?v=4">
+  <link rel="stylesheet" href="css/team-tickets.css?v=1">
+  <script>
+    (function(){if(localStorage.getItem('drexora-theme')==='dark')document.documentElement.classList.add('dark-mode');})();
+  </script>
+  <style>
+    /* ── Workspace tabs ─────────────────────────────────────── */
+    .ws-tab-bar {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 28px;
+      overflow-x: auto;
+    }
+    .ws-tab {
+      padding: 12px 22px;
+      font-size: .88rem;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--text-muted);
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      white-space: nowrap;
+      transition: color .15s, border-color .15s;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .ws-tab:hover { color: var(--text-primary); }
+    .ws-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .ws-tab-badge {
+      background: var(--primary);
+      color: #fff;
+      font-size: .68rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 99px;
+      min-width: 18px;
+      text-align: center;
+    }
+    .ws-panel { display: none; }
+    .ws-panel.active { display: block; }
+
+    /* ── Queue item card ────────────────────────────────────── */
+    .queue-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 12px;
+      transition: var(--transition);
+      cursor: default;
+    }
+    .queue-card:hover { border-color: var(--primary-light); box-shadow: var(--shadow-sm); }
+    .queue-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .queue-card-title {
+      font-size: .9rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .queue-card-meta {
+      font-size: .78rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .queue-card-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .queue-card-type {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--glass-active);
+      color: var(--primary);
+    }
+
+    /* ── Agent board card ───────────────────────────────────── */
+    .agent-board-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .agent-board-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      transition: var(--transition);
+    }
+    .agent-board-card:hover { border-color: var(--primary-light); box-shadow: var(--shadow-sm); }
+    .agent-board-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .agent-board-avatar {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: var(--glass-active);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--primary);
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .agent-board-avatar img {
+      width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
+    }
+    .agent-board-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .agent-stat {
+      background: var(--surface-raised);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      text-align: center;
+    }
+    .agent-stat-val { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+    .agent-stat-lbl { font-size: .65rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    .agent-board-assign {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .agent-board-assign select {
+      flex: 1;
+      font-size: .8rem;
+      padding: 6px 10px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      outline: none;
+      appearance: none;
+    }
+    .agent-board-assign select:focus { border-color: var(--primary); }
+
+    /* ── Team feed ──────────────────────────────────────────── */
+    .feed-compose {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .feed-compose textarea {
+      width: 100%;
+      resize: none;
+      padding: 10px 14px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-size: .88rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .15s;
+      min-height: 72px;
+    }
+    .feed-compose textarea:focus { border-color: var(--primary); }
+    .feed-post-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 12px;
+      transition: var(--transition);
+    }
+    .feed-post-card:hover { border-color: var(--primary-light); }
+    .feed-post-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .feed-post-avatar {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      background: var(--glass-active);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .82rem;
+      font-weight: 700;
+      color: var(--primary);
+      flex-shrink: 0;
+    }
+    .feed-post-name { font-size: .88rem; font-weight: 700; }
+    .feed-post-time { font-size: .72rem; color: var(--text-muted); }
+    .feed-post-body { font-size: .88rem; line-height: 1.65; color: var(--text-primary); white-space: pre-wrap; }
+    .feed-post-actions { margin-top: 10px; display: flex; gap: 8px; align-items: center; }
+    .feed-reply-area { margin-top: 12px; display: none; }
+    .feed-reply-area.open { display: block; }
+    .feed-reply-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .feed-reply-item {
+      background: var(--surface-raised);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: .84rem;
+    }
+    .feed-reply-author { font-weight: 600; color: var(--primary); margin-bottom: 2px; font-size: .78rem; }
+
+    /* ── Assign modal ───────────────────────────────────────── */
+    .assign-modal-body { padding: 10px 0 4px; }
+
+    /* ── Empty states ───────────────────────────────────────── */
+    .ws-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 56px 24px;
+      color: var(--text-muted);
+      gap: 10px;
+    }
+    .ws-empty-icon { font-size: 2.8rem; }
+    .ws-empty-title { font-size: .95rem; font-weight: 700; color: var(--text-secondary); }
+    .ws-empty-desc { font-size: .82rem; text-align: center; max-width: 280px; }
+
+    /* ── Queue section header ───────────────────────────────── */
+    .queue-section-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 20px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .queue-section-header h3 {
+      font-size: .82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--text-muted);
+    }
+    .queue-section-count {
+      background: var(--glass-active);
+      color: var(--primary);
+      font-size: .68rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 99px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-bg"></div>
+  <button class="sidebar-toggle" aria-label="Toggle menu">☰</button>
+  <div class="sidebar-overlay"></div>
+
+  <div class="app-layout">
+
+    <!-- ── Sidebar ──────────────────────────────────────────── -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <img src="images/logo.png" alt="Drexora" class="sidebar-logo-img">
+        <div class="sidebar-logo-text">Drexora <span>Support</span></div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Main</div>
+        <a class="nav-item" href="dashboard.html">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-item" href="knowledge-base.html">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Knowledge Base
+        </a>
+        <a class="nav-item" href="leads.html">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Leads
+        </a>
+        <a class="nav-item" href="chats.html">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Chats
+        </a>
+        <a class="nav-item" href="inbox.html">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          Team Inbox
+          <span class="nav-badge" id="inbox-badge" style="display:none"></span>
+        </a>
+        <a class="nav-item active" href="workspace.html">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+          Workspace
+          <span class="nav-badge" id="workspace-badge" style="display:none"></span>
+        </a>
+        <a class="nav-item" href="team.html">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Team
+        </a>
+        <a class="nav-item" href="tickets.html">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 0 0-2 2v3a2 2 0 1 1 0 4v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 1 1 0-4V7a2 2 0 0 0-2-2H5z"/></svg>
+          Tickets
+        </a>
+        <div class="nav-section-label">Account</div>
+        <a class="nav-item" href="settings.html">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="sidebar-user-avatar" id="sidebar-user-avatar"></div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name" id="sidebar-user-name">Loading…</div>
+            <div class="sidebar-user-email" id="sidebar-user-email"></div>
+          </div>
+          <button class="btn btn-ghost btn-sm logout-btn" title="Sign out" data-logout style="padding:6px 10px;font-size:.75rem">↩</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main Content ──────────────────────────────────────── -->
+    <main class="main-content">
+      <header class="topbar">
+        <div>
+          <div class="topbar-title">Workspace</div>
+          <div class="topbar-subtitle">Your assignments, team board, and team feed</div>
+        </div>
+        <div class="topbar-actions">
+          <button class="theme-toggle" aria-label="Switch theme">
+            <span class="theme-toggle-icon">🌙</span>
+            <span class="theme-toggle-label">Dark</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="content-wrap">
+
+        <!-- Tab bar -->
+        <div class="ws-tab-bar">
+          <button class="ws-tab active" data-tab="my-queue">
+            <svg style="width:15px;height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            My Queue
+            <span class="ws-tab-badge" id="my-queue-badge" style="display:none"></span>
+          </button>
+          <button class="ws-tab" data-tab="team-board">
+            <svg style="width:15px;height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Team Board
+          </button>
+          <button class="ws-tab" data-tab="team-feed">
+            <svg style="width:15px;height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Team Feed
+            <span class="ws-tab-badge" id="feed-badge" style="display:none"></span>
+          </button>
+        </div>
+
+        <!-- ── My Queue panel ─────────────────────────────── -->
+        <div class="ws-panel active" id="panel-my-queue">
+          <!-- Stats row -->
+          <div class="stats-grid animate-fadeUp" style="margin-bottom:24px" id="queue-stats-row">
+            <div class="stat-card">
+              <div class="stat-icon blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div class="stat-value" id="qs-chats">—</div>
+              <div class="stat-label">Assigned Chats</div>
+            </div>
+            <div class="stat-card animate-fadeUp stagger-1">
+              <div class="stat-icon amber">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 0 0-2 2v3a2 2 0 1 1 0 4v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 1 1 0-4V7a2 2 0 0 0-2-2H5z"/></svg>
+              </div>
+              <div class="stat-value" id="qs-tickets">—</div>
+              <div class="stat-label">Assigned Tickets</div>
+            </div>
+            <div class="stat-card animate-fadeUp stagger-2">
+              <div class="stat-icon green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="stat-value" id="qs-resolved">—</div>
+              <div class="stat-label">Resolved Today</div>
+            </div>
+            <div class="stat-card animate-fadeUp stagger-3">
+              <div class="stat-icon purple">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div class="stat-value" id="qs-waiting">—</div>
+              <div class="stat-label">Awaiting Reply</div>
+            </div>
+          </div>
+
+          <!-- Assigned chats section -->
+          <div id="queue-chats-section">
+            <div class="queue-section-header">
+              <h3>Assigned Conversations</h3>
+              <span class="queue-section-count" id="queue-chats-count">0</span>
+            </div>
+            <div id="queue-chats-list">
+              <div class="ws-empty">
+                <div class="ws-empty-icon">💬</div>
+                <div class="ws-empty-title">No assigned conversations</div>
+                <div class="ws-empty-desc">Conversations assigned to you will appear here.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Assigned tickets section -->
+          <div id="queue-tickets-section" style="margin-top:12px">
+            <div class="queue-section-header">
+              <h3>Assigned Tickets</h3>
+              <span class="queue-section-count" id="queue-tickets-count">0</span>
+            </div>
+            <div id="queue-tickets-list">
+              <div class="ws-empty">
+                <div class="ws-empty-icon">🎫</div>
+                <div class="ws-empty-title">No assigned tickets</div>
+                <div class="ws-empty-desc">Tickets assigned to you will appear here.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Team Board panel ──────────────────────────── -->
+        <div class="ws-panel" id="panel-team-board">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+            <div>
+              <div style="font-size:1rem;font-weight:700">Team Workload</div>
+              <div style="font-size:.82rem;color:var(--text-muted);margin-top:2px">Assign open conversations and tickets directly to team members</div>
+            </div>
+          </div>
+
+          <div class="agent-board-grid" id="agent-board-grid">
+            <!-- Populated by JS -->
+            <div class="ws-empty" style="grid-column:1/-1">
+              <div class="ws-empty-icon">👥</div>
+              <div class="ws-empty-title">Loading team…</div>
+            </div>
+          </div>
+
+          <!-- Unassigned queue -->
+          <div style="margin-top:8px">
+            <div class="queue-section-header">
+              <h3>Unassigned Conversations</h3>
+              <span class="queue-section-count" id="unassigned-chats-count">0</span>
+              <span style="font-size:.75rem;color:var(--text-muted);margin-left:4px">— waiting for an agent</span>
+            </div>
+            <div id="unassigned-chats-list">
+              <div class="ws-empty" style="padding:32px 24px">
+                <div class="ws-empty-icon">✅</div>
+                <div class="ws-empty-title">No unassigned conversations</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Team Feed panel ───────────────────────────── -->
+        <div class="ws-panel" id="panel-team-feed">
+          <!-- Compose box -->
+          <div class="feed-compose animate-fadeUp">
+            <div style="font-size:.82rem;font-weight:600;color:var(--text-secondary);margin-bottom:10px">
+              Post an update to your team
+            </div>
+            <textarea id="feed-compose-text" placeholder="Share a note, update, or announcement with the team…"></textarea>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:10px">
+              <button class="btn btn-primary btn-sm" id="feed-post-btn">
+                <svg style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Post to Team
+              </button>
+            </div>
+          </div>
+
+          <!-- Posts feed -->
+          <div id="team-feed-list">
+            <div class="ws-empty">
+              <div class="ws-empty-icon">📢</div>
+              <div class="ws-empty-title">No posts yet</div>
+              <div class="ws-empty-desc">Be the first to post an update for your team.</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /content-wrap -->
+    </main>
+  </div>
+
+  <!-- ── Assign to Agent Modal ──────────────────────────────── -->
+  <div class="modal-overlay" id="assign-modal">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <div class="modal-title" id="assign-modal-title">Assign Conversation</div>
+        <button class="modal-close" id="close-assign-modal">✕</button>
+      </div>
+      <div class="assign-modal-body">
+        <div class="form-group">
+          <label class="form-label">Select Team Member</label>
+          <select class="form-input form-select" id="assign-modal-agent">
+            <option value="">Loading…</option>
+          </select>
+        </div>
+        <div id="assign-modal-item-info" style="margin-top:4px;font-size:.8rem;color:var(--text-muted)"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="cancel-assign-modal">Cancel</button>
+        <button class="btn btn-primary" id="confirm-assign-modal">Assign</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script type="module" src="js/workspace.js"></script>
+  <script src="js/theme.js"></script>
+</body>
+</html>

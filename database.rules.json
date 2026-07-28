@@ -90,7 +90,33 @@
             ".read":  "auth != null && (auth.uid === $businessUid || auth.uid === $targetUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
             ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
           }
+        },
+
+        /* ── Workspace: team feed and collaboration ─────────── */
+        "workspace": {
+          /* Team feed: all workspace members can read and post */
+          "teamFeed": {
+            ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+            ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+            "$postId": {
+              ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+              ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+              /* Any member can mark a post as read (write to readBy/{uid} only) */
+              "readBy": {
+                "$readerUid": {
+                  ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+                  ".write": "auth != null && (auth.uid === $readerUid || auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+                }
+              },
+              /* Replies: any workspace member can add */
+              "replies": {
+                ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+                ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+              }
+            }
+          }
         }
+
       }
     },
 

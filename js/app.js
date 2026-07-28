@@ -299,26 +299,46 @@ export function setupSidebar(user) {
 }
 
 function _injectInboxNavLink() {
-  // Only inject once
-  if (document.querySelector('.nav-item[href="inbox.html"]')) return;
-  const chatsLink = document.querySelector('.nav-item[href="chats.html"]');
-  if (!chatsLink) return;
+  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
 
-  const inboxLink = document.createElement('a');
-  inboxLink.className = 'nav-item';
-  inboxLink.href = 'inbox.html';
-  inboxLink.innerHTML = `
-    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
-      <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
-    </svg>
-    Team Inbox
-    <span class="nav-badge" id="inbox-badge" style="display:none"></span>`;
-  chatsLink.insertAdjacentElement('afterend', inboxLink);
+  // ── Inject Team Inbox link (after Chats) ──────────────────
+  if (!document.querySelector('.nav-item[href="inbox.html"]')) {
+    const chatsLink = document.querySelector('.nav-item[href="chats.html"]');
+    if (chatsLink) {
+      const inboxLink = document.createElement('a');
+      inboxLink.className = 'nav-item';
+      inboxLink.href = 'inbox.html';
+      inboxLink.innerHTML = `
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+          <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+        </svg>
+        Team Inbox
+        <span class="nav-badge" id="inbox-badge" style="display:none"></span>`;
+      chatsLink.insertAdjacentElement('afterend', inboxLink);
+      if (currentPage === 'inbox.html') inboxLink.classList.add('active');
+    }
+  }
 
-  // Re-apply active state for inbox
-  const currentPage = window.location.pathname.split('/').pop();
-  if (currentPage === 'inbox.html') inboxLink.classList.add('active');
+  // ── Inject Workspace link (after Team Inbox, before Team) ──
+  if (!document.querySelector('.nav-item[href="workspace.html"]')) {
+    const inboxLink = document.querySelector('.nav-item[href="inbox.html"]');
+    if (inboxLink) {
+      const wsLink = document.createElement('a');
+      wsLink.className = 'nav-item';
+      wsLink.href = 'workspace.html';
+      wsLink.innerHTML = `
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+        Workspace
+        <span class="nav-badge" id="workspace-badge" style="display:none"></span>`;
+      inboxLink.insertAdjacentElement('afterend', wsLink);
+      if (currentPage === 'workspace.html') wsLink.classList.add('active');
+    }
+  }
 }
 
 async function _updatePresence(user) {
