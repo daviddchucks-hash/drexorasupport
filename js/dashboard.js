@@ -69,7 +69,7 @@ function renderBusinessInfo(profile) {
   if (emailEl) emailEl.textContent = currentUser.email;
 
   const colourEl = document.getElementById('biz-colour');
-  if (colourEl) colourEl.style.background = profile.themeColor || '#7c3aed';
+  if (colourEl) colourEl.style.background = profile.themeColor || '#C9A227';
 
   const welcomeEl = document.getElementById('biz-welcome');
   if (welcomeEl) welcomeEl.textContent = profile.welcomeMessage || '—';

@@ -197,16 +197,20 @@ textarea.form-input { resize: vertical; min-height: 90px; }
 .sidebar-logo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 18px 20px;
+  gap: 9px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--glass-border);
+  min-height: 0;
 }
 .sidebar-logo-img {
-  width: 40px;
-  height: 40px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 6px rgba(201,162,39,.35));
+  border-radius: 6px;
+  background: #fff;
+  padding: 2px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.3);
 }
 .sidebar-logo-icon {
   width: 36px; height: 36px;
@@ -713,10 +717,13 @@ tbody tr:hover { background: rgba(255,248,220,.03); }
   font-weight: 800;
 }
 .navbar-brand-img {
-  width: 42px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   object-fit: contain;
-  filter: drop-shadow(0 0 6px rgba(201,162,39,.4));
+  border-radius: 7px;
+  background: #fff;
+  padding: 2px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.3);
 }
 .navbar-brand-icon {
   width: 36px; height: 36px;
@@ -1011,10 +1018,13 @@ tbody tr:hover { background: rgba(255,248,220,.03); }
   gap: 8px;
 }
 .footer-logo {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
-  opacity: .8;
+  border-radius: 4px;
+  background: #fff;
+  padding: 2px;
+  opacity: .85;
 }
 
 /* Auth pages */
@@ -1043,10 +1053,13 @@ tbody tr:hover { background: rgba(255,248,220,.03); }
   margin-bottom: 28px;
 }
 .auth-logo-img {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   object-fit: contain;
-  filter: drop-shadow(0 0 8px rgba(201,162,39,.4));
+  border-radius: 12px;
+  background: #fff;
+  padding: 4px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.35), 0 0 0 1px rgba(201,162,39,.3);
 }
 .auth-logo-icon {
   width: 44px; height: 44px;

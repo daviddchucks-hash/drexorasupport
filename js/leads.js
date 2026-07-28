@@ -73,7 +73,7 @@ function renderLeads() {
     <tr data-id="${escHtml(lead.id)}" class="${lead.read ? '' : 'unread-row'}" style="${lead.read ? '' : 'background:rgba(124,58,237,.05)'}">
       <td>
         <div style="display:flex;align-items:center;gap:8px">
-          ${!lead.read ? '<span style="width:8px;height:8px;border-radius:50%;background:#7c3aed;flex-shrink:0;display:inline-block"></span>' : '<span style="width:8px;flex-shrink:0;display:inline-block"></span>'}
+          ${!lead.read ? '<span style="width:8px;height:8px;border-radius:50%;background:#C9A227;flex-shrink:0;display:inline-block"></span>' : '<span style="width:8px;flex-shrink:0;display:inline-block"></span>'}
           <strong>${escHtml(lead.visitorName || lead.name || 'Unknown')}</strong>
         </div>
       </td>

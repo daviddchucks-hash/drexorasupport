@@ -53,7 +53,7 @@ form.addEventListener('submit', async function (e) {
       name:           businessName,
       email:          email,
       logoUrl:        '',
-      themeColor:     '#7c3aed',
+      themeColor:     '#C9A227',
       welcomeMessage: 'Hi! How can we help you today? Ask a question below.',
       createdAt:      firebase.database.ServerValue.TIMESTAMP,
       plan:           'free'

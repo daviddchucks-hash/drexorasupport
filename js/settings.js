@@ -22,7 +22,7 @@ const installCode  = document.getElementById('install-code-display');
 
 /* ── Preset colours ────────────────────────────────────────── */
 const PRESET_COLOURS = [
-  '#7c3aed', '#a855f7', '#06b6d4', '#10b981',
+  '#C9A227', '#E4BC5A', '#D4A843', '#10b981',
   '#f59e0b', '#ef4444', '#ec4899', '#6366f1',
   '#0ea5e9', '#14b8a6'
 ];
@@ -54,7 +54,7 @@ function populateForm() {
 
   setVal('biz-name', profile.name);
   setVal('welcome-msg', profile.welcomeMessage);
-  setVal('theme-color', profile.themeColor || '#7c3aed');
+  setVal('theme-color', profile.themeColor || '#C9A227');
   setVal('chat-title', profile.chatTitle || '');
 
   // Logo preview
@@ -67,7 +67,7 @@ function populateForm() {
   }
 
   // Colour swatch active state
-  syncSwatchActive(profile.themeColor || '#7c3aed');
+  syncSwatchActive(profile.themeColor || '#C9A227');
 
   // Installation code
   if (installCode) {
@@ -127,7 +127,7 @@ async function saveProfile(e) {
 
   const name           = document.getElementById('biz-name')?.value.trim();
   const welcomeMessage = document.getElementById('welcome-msg')?.value.trim();
-  const themeColor     = document.getElementById('theme-color')?.value || '#7c3aed';
+  const themeColor     = document.getElementById('theme-color')?.value || '#C9A227';
   const chatTitle      = document.getElementById('chat-title')?.value.trim();
 
   if (!name) { toast('Business name is required.', 'warning'); return; }
