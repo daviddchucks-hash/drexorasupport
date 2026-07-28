@@ -1,75 +1,76 @@
 /**
  * team.js — ES6 Module
- * Team Management: members, invitations, roles, permissions
+ * Team Management: workspace-aware members, invitations, roles, permissions.
  */
 
-import { requireAuth, setupSidebar, toast, escHtml, timeAgo } from './app.js';
+import {
+  requireAuth, setupSidebar, toast, escHtml, timeAgo,
+  getWorkspaceUid, getCurrentUserRole, getUserRecord, logActivity
+} from './app.js';
 
-/* ── Role definitions ────────────────────────────────────── */
 const ROLES = {
   owner: {
-    label: 'Owner',
-    color: 'badge-danger',
+    label: 'Owner', color: 'badge-danger',
     permissions: {
-      'Reply to Chats': true, 'Reply to Emails': true, 'Reply to WhatsApp': true,
-      'Create Tickets': true, 'Delete Tickets': true, 'Assign Tickets': true,
-      'Close Tickets': true, 'Resolve Tickets': true, 'Manage Team': true,
-      'Manage Billing': true, 'View Analytics': true, 'Export Data': true,
-      'Manage AI': true, 'Manage Widget': true, 'Create API Keys': true,
-      'Manage Integrations': true, 'Delete Workspace': true, 'Invite Members': true
+      'Reply to Chats':true,'Reply to Emails':true,'Reply to WhatsApp':true,
+      'Create Tickets':true,'Delete Tickets':true,'Assign Tickets':true,
+      'Close Tickets':true,'Resolve Tickets':true,'Manage Team':true,
+      'Manage Billing':true,'View Analytics':true,'Export Data':true,
+      'Manage AI':true,'Manage Widget':true,'Create API Keys':true,
+      'Manage Integrations':true,'Delete Workspace':true,'Invite Members':true
     }
   },
   admin: {
-    label: 'Admin',
-    color: 'badge-warning',
+    label: 'Admin', color: 'badge-warning',
     permissions: {
-      'Reply to Chats': true, 'Reply to Emails': true, 'Reply to WhatsApp': true,
-      'Create Tickets': true, 'Delete Tickets': true, 'Assign Tickets': true,
-      'Close Tickets': true, 'Resolve Tickets': true, 'Manage Team': true,
-      'Manage Billing': false, 'View Analytics': true, 'Export Data': true,
-      'Manage AI': true, 'Manage Widget': true, 'Create API Keys': true,
-      'Manage Integrations': true, 'Delete Workspace': false, 'Invite Members': true
+      'Reply to Chats':true,'Reply to Emails':true,'Reply to WhatsApp':true,
+      'Create Tickets':true,'Delete Tickets':true,'Assign Tickets':true,
+      'Close Tickets':true,'Resolve Tickets':true,'Manage Team':true,
+      'Manage Billing':false,'View Analytics':true,'Export Data':true,
+      'Manage AI':true,'Manage Widget':true,'Create API Keys':true,
+      'Manage Integrations':true,'Delete Workspace':false,'Invite Members':true
     }
   },
   agent: {
-    label: 'Support Agent',
-    color: 'badge-info',
+    label: 'Support Agent', color: 'badge-info',
     permissions: {
-      'Reply to Chats': true, 'Reply to Emails': true, 'Reply to WhatsApp': true,
-      'Create Tickets': true, 'Delete Tickets': false, 'Assign Tickets': false,
-      'Close Tickets': true, 'Resolve Tickets': true, 'Manage Team': false,
-      'Manage Billing': false, 'View Analytics': false, 'Export Data': false,
-      'Manage AI': false, 'Manage Widget': false, 'Create API Keys': false,
-      'Manage Integrations': false, 'Delete Workspace': false, 'Invite Members': false
+      'Reply to Chats':true,'Reply to Emails':true,'Reply to WhatsApp':true,
+      'Create Tickets':true,'Delete Tickets':false,'Assign Tickets':false,
+      'Close Tickets':true,'Resolve Tickets':true,'Manage Team':false,
+      'Manage Billing':false,'View Analytics':false,'Export Data':false,
+      'Manage AI':false,'Manage Widget':false,'Create API Keys':false,
+      'Manage Integrations':false,'Delete Workspace':false,'Invite Members':false
     }
   },
   viewer: {
-    label: 'Viewer',
-    color: 'badge-muted',
+    label: 'Viewer', color: 'badge-muted',
     permissions: {
-      'Reply to Chats': false, 'Reply to Emails': false, 'Reply to WhatsApp': false,
-      'Create Tickets': false, 'Delete Tickets': false, 'Assign Tickets': false,
-      'Close Tickets': false, 'Resolve Tickets': false, 'Manage Team': false,
-      'Manage Billing': false, 'View Analytics': true, 'Export Data': false,
-      'Manage AI': false, 'Manage Widget': false, 'Create API Keys': false,
-      'Manage Integrations': false, 'Delete Workspace': false, 'Invite Members': false
+      'Reply to Chats':false,'Reply to Emails':false,'Reply to WhatsApp':false,
+      'Create Tickets':false,'Delete Tickets':false,'Assign Tickets':false,
+      'Close Tickets':false,'Resolve Tickets':false,'Manage Team':false,
+      'Manage Billing':false,'View Analytics':true,'Export Data':false,
+      'Manage AI':false,'Manage Widget':false,'Create API Keys':false,
+      'Manage Integrations':false,'Delete Workspace':false,'Invite Members':false
     }
   }
 };
-
 const ALL_PERMISSIONS = Object.keys(ROLES.owner.permissions);
 
-/* ── State ─────────────────────────────────────────────────── */
-let currentUser = null;
-let db = null;
-let members = {};
-let invitations = {};
-let editingMemberId = null;
+let currentUser    = null;
+let workspaceUid   = null;
+let userRole       = null;
+let userRec        = null;
+let db             = null;
+let members        = {};
+let invitations    = {};
+let editingMemberId= null;
 
-/* ── Init ──────────────────────────────────────────────────── */
-requireAuth(user => {
-  currentUser = user;
-  db = firebase.database();
+requireAuth(async (user, wid) => {
+  currentUser  = user;
+  workspaceUid = wid;
+  userRole     = await getCurrentUserRole();
+  userRec      = await getUserRecord();
+  db           = firebase.database();
   setupSidebar(user);
   bindEvents();
   loadTeam();
@@ -77,631 +78,349 @@ requireAuth(user => {
   setupPermissionPreview();
 });
 
-/* ── Load team data ─────────────────────────────────────────── */
 function loadTeam() {
-  const uid = currentUser.uid;
-
-  // Safety net: if no data arrives within 6 s, clear the skeletons so the
-  // user isn't stuck staring at an indefinite loading state.
-  let membersLoaded = false;
-  let invitesLoaded = false;
-  setTimeout(() => {
-    if (!membersLoaded) { membersLoaded = true; renderMembers(); updateStats(); }
-    if (!invitesLoaded) { invitesLoaded = true; renderInvitations(); }
+  let mLoaded = false, iLoaded = false;
+  const timeout = setTimeout(() => {
+    if (!mLoaded) { mLoaded = true; renderMembers(); updateStats(); }
+    if (!iLoaded) { iLoaded = true; renderInvitations(); }
   }, 6000);
 
-  // Listen for members
-  db.ref(`businesses/${uid}/team/members`).on('value', snap => {
-    membersLoaded = true;
+  db.ref(`businesses/${workspaceUid}/team/members`).on('value', snap => {
+    mLoaded = true;
     members = snap.val() || {};
     renderMembers();
     updateStats();
-  }, err => {
-    // Permission denied — database rules likely not yet deployed to Firebase console
-    console.warn('[Drexora] team/members read failed:', err.message,
-      '\nFix: deploy database.rules.json to Firebase via the console or "firebase deploy --only database".');
-    membersLoaded = true;
-    renderMembers();
-    updateStats();
-  });
+  }, err => console.warn('[Team] members read failed:', err.message));
 
-  // Listen for invitations
-  db.ref(`businesses/${uid}/team/invitations`).on('value', snap => {
-    invitesLoaded = true;
+  db.ref(`businesses/${workspaceUid}/team/invitations`).on('value', snap => {
+    iLoaded = true;
     invitations = snap.val() || {};
     renderInvitations();
     updateStats();
-  }, err => {
-    console.warn('[Drexora] team/invitations read failed:', err.message);
-    invitesLoaded = true;
-    renderInvitations();
   });
-
-  // Add owner as first member if team is empty
-  db.ref(`businesses/${uid}/team/members`).once('value').then(snap => {
-    if (!snap.val()) {
-      db.ref(`businesses/${uid}/profile`).once('value').then(pSnap => {
-        const profile = pSnap.val() || {};
-        const ownerMember = {
-          name: profile.name || currentUser.email.split('@')[0],
-          email: currentUser.email,
-          role: 'owner',
-          status: 'online',
-          lastActive: Date.now(),
-          assignedTickets: 0,
-          photoUrl: profile.logoUrl || '',
-          uid: currentUser.uid,
-          joinedAt: Date.now()
-        };
-        db.ref(`businesses/${uid}/team/members/${currentUser.uid}`).set(ownerMember)
-          .catch(e => console.warn('[Drexora] owner member write failed:', e.message));
-      }).catch(() => {});
-    }
-  }).catch(e => console.warn('[Drexora] team/members once failed:', e.message));
 }
 
-/* ── Render members table ───────────────────────────────────── */
+function loadIncomingInvitations() {
+  // Already processed by app.js; this is just a UI refresh trigger
+}
+
+function updateStats() {
+  const arr = Object.values(members);
+  const set = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  set('stat-total-members', arr.length);
+  set('stat-online-members', arr.filter(m=>m.status==='online').length);
+  set('stat-pending-invites', Object.values(invitations).filter(i=>i.status==='pending').length);
+  set('stat-active-agents', arr.filter(m=>m.role==='agent'&&m.status==='online').length);
+}
+
 function renderMembers() {
   const tbody = document.getElementById('members-tbody');
-  const search = document.getElementById('member-search').value.toLowerCase();
-
-  const arr = Object.entries(members).filter(([id, m]) => {
-    if (!search) return true;
-    return (m.name||'').toLowerCase().includes(search) ||
-           (m.email||'').toLowerCase().includes(search);
-  });
-
+  if (!tbody) return;
+  const arr = Object.entries(members);
   if (!arr.length) {
-    tbody.innerHTML = `<tr><td colspan="6">
-      <div class="empty-state"><div class="empty-state-icon">👥</div>
-      <div class="empty-state-title">No Members Found</div>
-      <div class="empty-state-desc">Invite teammates to get started.</div></div>
-    </td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-state-icon">👥</div>
+      <div class="empty-state-title">No team members yet</div>
+      <div class="empty-state-desc">Invite your first teammate using the button above.</div></div></td></tr>`;
     return;
   }
 
-  tbody.innerHTML = arr.map(([id, m]) => {
-    const role = ROLES[m.role] || ROLES.agent;
-    const initials = (m.name || 'U').slice(0, 2).toUpperCase();
-    const avatarHtml = m.photoUrl
-      ? `<img src="${escHtml(m.photoUrl)}" alt="${escHtml(m.name)}" class="member-avatar-img">`
-      : `<div class="member-avatar-fallback">${initials}</div>`;
-
-    const statusClass = m.status === 'online' ? 'status-online' :
-                        m.status === 'away'   ? 'status-away'   : 'status-offline';
-    const statusLabel = m.status === 'online' ? 'Online' :
-                        m.status === 'away'   ? 'Away'   : 'Offline';
-
-    const isOwner = m.uid === currentUser.uid;
-
-    return `<tr class="animate-fadeUp">
-      <td>
-        <div class="member-cell">
-          <div class="member-avatar">${avatarHtml}</div>
-          <div>
-            <div class="member-name">${escHtml(m.name||'Unknown')}</div>
-            <div class="member-email">${escHtml(m.email||'')}</div>
+  tbody.innerHTML = arr.map(([uid, m]) => {
+    const role   = ROLES[m.role] || ROLES.agent;
+    const isMe   = uid === currentUser.uid;
+    const canEdit= userRole === 'owner' || (userRole === 'admin' && m.role !== 'owner');
+    return `
+      <tr>
+        <td>
+          <div class="member-cell">
+            <div class="member-avatar">
+              ${m.photoUrl
+                ? `<img class="member-avatar-img" src="${escHtml(m.photoUrl)}" alt="">`
+                : `<div class="member-avatar-fallback">${escHtml((m.name||m.email||'?')[0].toUpperCase())}</div>`}
+            </div>
+            <div>
+              <div class="member-name">${escHtml(m.name||'—')} ${isMe?'<span style="font-size:.65rem;color:var(--text-muted)">(you)</span>':''}</div>
+              <div class="member-email">${escHtml(m.email||'—')}</div>
+            </div>
           </div>
-        </div>
-      </td>
-      <td><span class="badge ${role.color}">${role.label}</span></td>
-      <td>
-        <div class="status-cell">
-          <span class="status-dot ${statusClass}"></span>
-          <span>${statusLabel}</span>
-        </div>
-      </td>
-      <td class="text-muted">${timeAgo(m.lastActive)}</td>
-      <td><span class="badge badge-muted">${m.assignedTickets || 0}</span></td>
-      <td>
-        ${isOwner ? '' : `
-        <div class="action-menu-wrap">
-          <button class="action-menu-btn" onclick="toggleMemberMenu(event,'${id}')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-          </button>
-          <div class="action-menu" id="menu-${id}">
-            <button class="action-menu-item" onclick="viewProfile('${id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              View Profile
-            </button>
-            <button class="action-menu-item" onclick="editRole('${id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              Edit Role
-            </button>
-            <button class="action-menu-item" onclick="suspendMember('${id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-              ${m.suspended ? 'Unsuspend' : 'Suspend'} Member
-            </button>
-            <div class="action-menu-divider"></div>
-            <button class="action-menu-item action-menu-item--danger" onclick="removeMember('${id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-              Remove Member
-            </button>
+        </td>
+        <td><span class="badge ${role.color}">${escHtml(role.label)}</span></td>
+        <td>
+          <div class="status-cell">
+            <span class="status-dot" style="background:${m.status==='online'?'#10b981':m.status==='away'?'#f59e0b':'#6b7280'}"></span>
+            <span>${escHtml(m.suspended?'Suspended':m.status||'offline')}</span>
           </div>
-        </div>`}
-      </td>
-    </tr>`;
+        </td>
+        <td style="text-align:center">${m.assignedChats||0}</td>
+        <td style="text-align:center">${m.assignedTickets||0}</td>
+        <td style="font-size:.8rem;color:var(--text-muted)">${timeAgo(m.lastActive)}</td>
+        <td>
+          ${canEdit ? `
+          <div class="action-menu-wrap">
+            <button class="btn btn-ghost btn-sm" onclick="toggleMemberMenu(event,'${escHtml(uid)}')">⋯</button>
+            <div class="action-menu" id="menu-${escHtml(uid)}">
+              <button class="action-menu-item" onclick="viewProfile('${escHtml(uid)}')">👤 View Profile</button>
+              <button class="action-menu-item" onclick="editMember('${escHtml(uid)}')">✏️ Edit Role</button>
+              <button class="action-menu-item" onclick="toggleSuspend('${escHtml(uid)}')">${m.suspended?'✅ Unsuspend':'🚫 Suspend'}</button>
+              ${m.role!=='owner'?`<button class="action-menu-item danger" onclick="removeMember('${escHtml(uid)}')">🗑 Remove</button>`:''}
+            </div>
+          </div>` : '—'}
+        </td>
+      </tr>`;
   }).join('');
 }
 
-/* ── Render invitations ─────────────────────────────────────── */
 function renderInvitations() {
-  const container = document.getElementById('invitations-container');
-  const empty = document.getElementById('invitations-empty');
-  const arr = Object.entries(invitations);
+  const tbody = document.getElementById('invitations-tbody');
+  if (!tbody) return;
+  const arr = Object.entries(invitations).filter(([,i])=>i.status==='pending');
+  const container = document.getElementById('invitations-section');
+  if (container) container.style.display = arr.length ? 'block' : 'none';
+  if (!arr.length) return;
 
-  if (!arr.length) {
-    container.innerHTML = `<div class="empty-state" id="invitations-empty">
-      <div class="empty-state-icon">📭</div>
-      <div class="empty-state-title">No Pending Invitations</div>
-      <div class="empty-state-desc">Invite teammates using the button above to grow your team.</div>
-    </div>`;
-    return;
-  }
-
-  container.innerHTML = `<div class="invitations-list">${arr.map(([id, inv]) => {
-    const role = ROLES[inv.role] || ROLES.agent;
-    const initials = (inv.name || inv.email).slice(0, 2).toUpperCase();
-    return `<div class="invitation-item animate-fadeUp">
-      <div class="member-avatar"><div class="member-avatar-fallback" style="background:var(--glass-active)">${initials}</div></div>
-      <div style="flex:1;min-width:0">
-        <div class="member-name">${escHtml(inv.name || 'Unknown')}</div>
-        <div class="member-email">${escHtml(inv.email)}</div>
-      </div>
-      <span class="badge ${role.color}">${role.label}</span>
-      <span class="badge badge-warning">Pending</span>
-      <span class="text-muted" style="font-size:.78rem;white-space:nowrap">${timeAgo(inv.createdAt)}</span>
-      <button class="btn btn-ghost btn-sm" onclick="cancelInvitation('${id}')">Cancel</button>
-    </div>`;
-  }).join('')}</div>`;
+  tbody.innerHTML = arr.map(([id, inv]) => `
+    <tr>
+      <td>${escHtml(inv.email||'—')}</td>
+      <td>${escHtml(inv.name||'—')}</td>
+      <td><span class="badge ${ROLES[inv.role]?.color||'badge-muted'}">${ROLES[inv.role]?.label||inv.role}</span></td>
+      <td><span class="badge badge-warning">Pending</span></td>
+      <td>
+        <button class="btn btn-danger btn-sm" onclick="cancelInvitation('${escHtml(id)}')">Cancel</button>
+      </td>
+    </tr>`).join('');
 }
 
-/* ── Incoming invitations (sent TO this user by other workspaces) ───── */
-async function loadIncomingInvitations() {
-  try {
-    const encodedEmail = currentUser.email.replace(/\./g, ',');
-    // Live listener so new invites appear without a page refresh
-    db.ref('pendingInvitations/' + encodedEmail).on('value', async snap => {
-      const raw = snap.val() || {};
-      const enriched = await Promise.all(
-        Object.entries(raw).map(async ([key, invite]) => {
-          let businessName = invite.invitedBy || invite.businessUid;
-          try {
-            const pSnap = await db
-              .ref('businesses/' + invite.businessUid + '/profile/name')
-              .once('value');
-            if (pSnap.val()) businessName = pSnap.val();
-          } catch (_) {}
-          return [key, { ...invite, businessName }];
-        })
-      );
-      renderIncomingInvitations(Object.fromEntries(enriched));
-    });
-  } catch (err) {
-    console.warn('[Drexora] loadIncomingInvitations error:', err);
-  }
-}
+/* ── Invite form ─────────────────────────────────────────── */
+async function sendInvitation() {
+  const name  = document.getElementById('invite-name')?.value.trim();
+  const email = document.getElementById('invite-email')?.value.trim().toLowerCase();
+  const role  = document.getElementById('invite-role')?.value || 'agent';
+  const msg   = document.getElementById('invite-message')?.value.trim();
 
-function renderIncomingInvitations(incomingMap) {
-  const card      = document.getElementById('incoming-invitations-card');
-  const container = document.getElementById('incoming-invitations-container');
-  const badge     = document.getElementById('incoming-badge');
-  if (!card || !container) return;
-
-  const entries = Object.entries(incomingMap);
-  if (badge) badge.textContent = entries.length || '';
-
-  if (!entries.length) {
-    card.style.display = 'none';
-    return;
-  }
-  card.style.display = '';
-
-  container.innerHTML = '<div class="invitations-list">' +
-    entries.map(([key, inv]) => {
-      const role     = ROLES[inv.role] || ROLES.agent;
-      const initials = (inv.businessName || 'W').slice(0, 2).toUpperCase();
-      const safeKey  = escHtml(key);
-      const safeBizUid   = escHtml(inv.businessUid || '');
-      const safeBizInvId = escHtml(inv.businessInviteId || '');
-      const safeName     = escHtml(inv.name || '');
-      const safeRole     = escHtml(inv.role || 'agent');
-      return (
-        '<div class="invitation-item animate-fadeUp" id="incoming-item-' + safeKey + '">' +
-          '<div class="member-avatar">' +
-            '<div class="member-avatar-fallback" style="background:rgba(99,102,241,.18);color:var(--primary)">' + initials + '</div>' +
-          '</div>' +
-          '<div style="flex:1;min-width:0">' +
-            '<div class="member-name">' + escHtml(inv.businessName || inv.businessUid) + '</div>' +
-            '<div class="member-email">Invited by ' + escHtml(inv.invitedBy || 'unknown') + ' &nbsp;&middot;&nbsp; ' + timeAgo(inv.createdAt) + '</div>' +
-          '</div>' +
-          '<span class="badge ' + role.color + '">' + role.label + '</span>' +
-          '<div style="display:flex;gap:8px;flex-shrink:0">' +
-            `<button class="btn btn-primary btn-sm" onclick="acceptIncomingInvitation('${safeKey}','${safeBizUid}','${safeBizInvId}','${safeName}','${safeRole}',this)">&#10003; Accept</button>` +
-            `<button class="btn btn-ghost btn-sm" onclick="declineIncomingInvitation('${safeKey}',this)">Decline</button>` +
-          '</div>' +
-        '</div>'
-      );
-    }).join('') +
-  '</div>';
-}
-
-/* ── Accept incoming invitation ───────────────────────────────── */
-window.acceptIncomingInvitation = async function(inviteKey, businessUid, businessInviteId, invitedName, role, btn) {
-  btn.disabled    = true;
-  btn.textContent = 'Joining…';
-  try {
-    const encodedEmail = currentUser.email.replace(/\./g, ',');
-
-    // 1. Add user to the business team/members.
-    //    Rule: auth.uid === $memberId allows invited users to write their own record.
-    await db.ref('businesses/' + businessUid + '/team/members/' + currentUser.uid).set({
-      name:            invitedName || currentUser.email.split('@')[0],
-      email:           currentUser.email,
-      role:            role || 'agent',
-      status:          'online',
-      lastActive:      Date.now(),
-      assignedTickets: 0,
-      photoUrl:        currentUser.photoURL || '',
-      uid:             currentUser.uid,
-      joinedAt:        Date.now()
-    });
-
-    // 2. Remove the business-level invitation record (non-fatal if denied)
-    if (businessInviteId) {
-      await db.ref('businesses/' + businessUid + '/team/invitations/' + businessInviteId)
-        .remove().catch(() => {});
-    }
-
-    // 3. Remove from pendingInvitations — triggers the live listener
-    //    which will re-render the section automatically.
-    await db.ref('pendingInvitations/' + encodedEmail + '/' + inviteKey).remove();
-
-    toast('You have joined the team!', 'success');
-  } catch (err) {
-    btn.disabled    = false;
-    btn.textContent = '✓ Accept';
-    toast('Failed to accept invitation. Please try again.', 'error');
-    console.error('[Drexora] acceptIncomingInvitation:', err);
-  }
-};
-
-/* ── Decline incoming invitation ──────────────────────────────── */
-window.declineIncomingInvitation = async function(inviteKey, btn) {
-  if (!confirm('Decline this invitation?')) return;
-  btn.disabled = true;
-  try {
-    const encodedEmail = currentUser.email.replace(/\./g, ',');
-    await db.ref('pendingInvitations/' + encodedEmail + '/' + inviteKey).remove();
-    toast('Invitation declined.', 'info');
-  } catch (err) {
-    btn.disabled = false;
-    toast('Failed to decline invitation.', 'error');
-  }
-};
-
-/* ── Update stats ───────────────────────────────────────────── */
-function updateStats() {
-  const membersArr = Object.values(members);
-  const invitesArr = Object.values(invitations);
-
-  animateCounter('stat-total-members', membersArr.length);
-  animateCounter('stat-online-members', membersArr.filter(m => m.status === 'online').length);
-  animateCounter('stat-pending-invites', invitesArr.length);
-  animateCounter('stat-active-agents', membersArr.filter(m => m.role === 'agent' && !m.suspended).length);
-}
-
-/* ── Animated counter ───────────────────────────────────────── */
-function animateCounter(id, target) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const start = parseInt(el.textContent) || 0;
-  if (start === target) { el.textContent = target; return; }
-  const step = Math.ceil(Math.abs(target - start) / 20);
-  let current = start;
-  const interval = setInterval(() => {
-    current = current < target ? Math.min(current + step, target) : Math.max(current - step, target);
-    el.textContent = current;
-    if (current === target) clearInterval(interval);
-  }, 30);
-}
-
-/* ── Permission preview ─────────────────────────────────────── */
-function setupPermissionPreview() {
-  const roleSelect = document.getElementById('invite-role');
-  if (roleSelect) {
-    roleSelect.addEventListener('change', () => updatePermissionPreview(roleSelect.value));
-    updatePermissionPreview(roleSelect.value);
-  }
-}
-
-function updatePermissionPreview(roleKey) {
-  const role = ROLES[roleKey] || ROLES.agent;
-  const titleEl = document.getElementById('perm-preview-title');
-  const gridEl = document.getElementById('perm-preview-grid');
-  if (titleEl) titleEl.textContent = role.label;
-  if (gridEl) {
-    gridEl.innerHTML = ALL_PERMISSIONS.map(p => `
-      <div class="perm-item ${role.permissions[p] ? 'perm-yes' : 'perm-no'}">
-        <span class="perm-icon">${role.permissions[p] ? '✓' : '✕'}</span>
-        <span>${p}</span>
-      </div>`).join('');
-  }
-}
-
-/* ── Bind UI events ─────────────────────────────────────────── */
-function bindEvents() {
-  // Invite modal
-  const inviteBtn = document.getElementById('invite-btn');
-  const inviteModal = document.getElementById('invite-modal');
-  const closeInviteModal = document.getElementById('close-invite-modal');
-  const cancelInviteBtn = document.getElementById('cancel-invite-btn');
-  const sendInviteBtn = document.getElementById('send-invite-btn');
-
-  inviteBtn.addEventListener('click', () => openModal('invite-modal'));
-  closeInviteModal.addEventListener('click', () => closeModal('invite-modal'));
-  cancelInviteBtn.addEventListener('click', () => closeModal('invite-modal'));
-  inviteModal.addEventListener('click', e => { if (e.target === inviteModal) closeModal('invite-modal'); });
-
-  sendInviteBtn.addEventListener('click', sendInvite);
-
-  // Edit role modal
-  document.getElementById('close-edit-role-modal').addEventListener('click', () => closeModal('edit-role-modal'));
-  document.getElementById('cancel-edit-role-btn').addEventListener('click', () => closeModal('edit-role-modal'));
-  document.getElementById('save-edit-role-btn').addEventListener('click', saveEditRole);
-  document.getElementById('edit-role-modal').addEventListener('click', e => { if (e.target.id === 'edit-role-modal') closeModal('edit-role-modal'); });
-
-  // View profile modal
-  document.getElementById('close-view-profile-modal').addEventListener('click', () => closeModal('view-profile-modal'));
-  document.getElementById('close-profile-btn').addEventListener('click', () => closeModal('view-profile-modal'));
-  document.getElementById('view-profile-modal').addEventListener('click', e => { if (e.target.id === 'view-profile-modal') closeModal('view-profile-modal'); });
-
-  // Search
-  document.getElementById('member-search').addEventListener('input', renderMembers);
-
-  // Photo upload preview
-  document.getElementById('invite-photo-input').addEventListener('change', e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      document.getElementById('invite-photo-preview').innerHTML = `<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
-    };
-    reader.readAsDataURL(file);
-  });
-
-  // Close action menus on outside click
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.action-menu-wrap')) {
-      document.querySelectorAll('.action-menu.open').forEach(m => m.classList.remove('open'));
-    }
-  });
-}
-
-/* ── Send invite ────────────────────────────────────────────── */
-async function sendInvite() {
-  const name  = document.getElementById('invite-name').value.trim();
-  const email = document.getElementById('invite-email').value.trim();
-  const role  = document.getElementById('invite-role').value;
-
-  if (!name) { toast('Please enter a full name.', 'error'); return; }
-  if (!email || !/\S+@\S+\.\S+/.test(email)) { toast('Please enter a valid email.', 'error'); return; }
-
-  // Check for duplicate
-  const existing = Object.values(members).find(m => m.email === email);
-  const alreadyInvited = Object.values(invitations).find(i => i.email === email);
-  if (existing) { toast('This person is already a team member.', 'error'); return; }
-  if (alreadyInvited) { toast('An invitation has already been sent to this email.', 'warning'); return; }
+  if (!email) { toast('Email is required.', 'warning'); return; }
+  if (!name)  { toast('Name is required.', 'warning');  return; }
 
   const btn = document.getElementById('send-invite-btn');
-  btn.disabled = true;
-  btn.textContent = 'Sending…';
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
 
   try {
-    const uid = currentUser.uid;
-    const inviteRef = db.ref(`businesses/${uid}/team/invitations`).push();
-    const invitePayload = {
-      name, email, role,
-      status: 'pending',
-      createdAt: Date.now(),
-      invitedBy: currentUser.email,
-      permissions: ROLES[role]?.permissions || ROLES.agent.permissions
-    };
-    await inviteRef.set(invitePayload);
+    // Check if user is already a member
+    const existingMember = Object.values(members).find(m => m.email?.toLowerCase() === email);
+    if (existingMember) { toast('This person is already in your workspace.', 'warning'); return; }
 
-    // FIX: Also write to the root-level pendingInvitations node so the
-    // invited user (who cannot access the owner's business node) can
-    // discover and accept the invite automatically when they next log in.
+    const perms = ROLES[role]?.permissions || {};
+    const invId = db.ref(`businesses/${workspaceUid}/team/invitations`).push().key;
+
+    // Write business-level invitation
+    await db.ref(`businesses/${workspaceUid}/team/invitations/${invId}`).set({
+      email, name, role,
+      message:    msg || '',
+      status:     'pending',
+      permissions: perms,
+      invitedBy:  currentUser.uid,
+      invitedByName: userRec?.name || currentUser.email.split('@')[0],
+      createdAt:  firebase.database.ServerValue.TIMESTAMP
+    });
+
+    // Write pending invitation at root level (cross-workspace lookup)
     const encodedEmail = email.replace(/\./g, ',');
-    await firebase.database()
-      .ref(`pendingInvitations/${encodedEmail}/${inviteRef.key}`)
-      .set({
-        businessUid: uid,
-        businessInviteId: inviteRef.key,
-        name, email, role,
-        invitedBy: currentUser.email,
-        permissions: invitePayload.permissions,
-        createdAt: invitePayload.createdAt
-      });
+    const invKey = db.ref(`pendingInvitations/${encodedEmail}`).push().key;
+    await db.ref(`pendingInvitations/${encodedEmail}/${invKey}`).set({
+      businessUid:       workspaceUid,
+      businessInviteId:  invId,
+      name, role,
+      permissions:       perms,
+      invitedBy:         currentUser.uid,
+      message:           msg || ''
+    });
 
-    toast(`Invitation sent to ${email}!`, 'success');
+    await logActivity(workspaceUid, `${userRec?.name||'Owner'} invited ${name} (${email}) as ${role}`, { type: 'invitation_sent' });
+
+    toast(`Invitation sent to ${email}.`, 'success');
     closeModal('invite-modal');
-    document.getElementById('invite-name').value = '';
-    document.getElementById('invite-email').value = '';
-    document.getElementById('invite-role').value = 'agent';
-    updatePermissionPreview('agent');
+    ['invite-name','invite-email','invite-message'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
   } catch (err) {
-    toast('Failed to send invitation. Try again.', 'error');
+    toast('Failed to send invitation.', 'error');
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = `<svg style="width:15px;height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Invite`;
+    if (btn) { btn.disabled = false; btn.textContent = 'Send Invitation'; }
   }
 }
 
-/* ── Cancel invitation ──────────────────────────────────────── */
-window.cancelInvitation = async function(inviteId) {
+window.cancelInvitation = async function(invId) {
   if (!confirm('Cancel this invitation?')) return;
   try {
-    // FIX: Also remove from the root pendingInvitations node so the invited
-    // user no longer receives an outdated invitation on next login.
-    const invite = invitations[inviteId];
-    if (invite?.email) {
-      const encodedEmail = invite.email.replace(/\./g, ',');
-      await firebase.database()
-        .ref(`pendingInvitations/${encodedEmail}/${inviteId}`)
-        .remove();
+    const inv = invitations[invId];
+    await db.ref(`businesses/${workspaceUid}/team/invitations/${invId}`).remove();
+    if (inv?.email) {
+      const encodedEmail = inv.email.toLowerCase().replace(/\./g, ',');
+      const snap = await db.ref(`pendingInvitations/${encodedEmail}`).once('value');
+      const pending = snap.val() || {};
+      for (const [key, entry] of Object.entries(pending)) {
+        if (entry.businessInviteId === invId || entry.businessUid === workspaceUid) {
+          await db.ref(`pendingInvitations/${encodedEmail}/${key}`).remove();
+        }
+      }
     }
-    await db.ref(`businesses/${currentUser.uid}/team/invitations/${inviteId}`).remove();
     toast('Invitation cancelled.', 'info');
-  } catch {
-    toast('Failed to cancel invitation.', 'error');
-  }
+  } catch { toast('Failed to cancel invitation.', 'error'); }
 };
 
-/* ── View profile ───────────────────────────────────────────── */
-window.viewProfile = function(memberId) {
+/* ── Member actions ──────────────────────────────────────── */
+window.viewProfile = function(uid) {
   closeAllMenus();
-  const m = members[memberId];
+  const m = members[uid];
   if (!m) return;
   const role = ROLES[m.role] || ROLES.agent;
-  const initials = (m.name || 'U').slice(0, 2).toUpperCase();
-  const avatarHtml = m.photoUrl
-    ? `<img src="${escHtml(m.photoUrl)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover">`
-    : `<div style="width:72px;height:72px;border-radius:50%;background:var(--glass-active);display:grid;place-items:center;font-size:1.5rem;font-weight:700;color:var(--primary)">${initials}</div>`;
-
-  const permList = Object.entries(m.permissions || role.permissions || {}).map(([k, v]) =>
-    `<div class="perm-item ${v ? 'perm-yes' : 'perm-no'}"><span class="perm-icon">${v ? '✓' : '✕'}</span><span>${k}</span></div>`
-  ).join('');
-
   document.getElementById('view-profile-content').innerHTML = `
-    <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
-      ${avatarHtml}
-      <div>
-        <div style="font-size:1.1rem;font-weight:700">${escHtml(m.name||'Unknown')}</div>
-        <div style="color:var(--text-secondary);font-size:.875rem">${escHtml(m.email||'')}</div>
-        <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
-          <span class="badge ${role.color}">${role.label}</span>
-          <div class="status-cell"><span class="status-dot status-${m.status||'offline'}"></span><span style="font-size:.8rem">${m.status||'offline'}</span></div>
-        </div>
+    <div style="text-align:center;padding:20px 0 10px">
+      <div style="width:80px;height:80px;border-radius:50%;background:var(--glass-active);margin:0 auto 12px;
+                  display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700;color:var(--primary)">
+        ${m.photoUrl ? `<img src="${escHtml(m.photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : escHtml((m.name||'?')[0].toUpperCase())}
       </div>
+      <div style="font-size:1.1rem;font-weight:700;margin-bottom:4px">${escHtml(m.name||'Unknown')}</div>
+      <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:10px">${escHtml(m.email||'—')}</div>
+      <span class="badge ${role.color}">${role.label}</span>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;padding:14px;background:var(--glass-bg);border:1px solid var(--border);border-radius:var(--radius)">
-      <div><div style="font-size:.75rem;color:var(--text-muted);margin-bottom:2px">Last Active</div><div style="font-size:.875rem;font-weight:600">${timeAgo(m.lastActive)}</div></div>
-      <div><div style="font-size:.75rem;color:var(--text-muted);margin-bottom:2px">Assigned Tickets</div><div style="font-size:.875rem;font-weight:600">${m.assignedTickets||0}</div></div>
-      <div><div style="font-size:.75rem;color:var(--text-muted);margin-bottom:2px">Joined</div><div style="font-size:.875rem;font-weight:600">${m.joinedAt ? new Date(m.joinedAt).toLocaleDateString() : '—'}</div></div>
-      <div><div style="font-size:.75rem;color:var(--text-muted);margin-bottom:2px">Status</div><div style="font-size:.875rem;font-weight:600">${m.suspended ? 'Suspended' : 'Active'}</div></div>
-    </div>
-    <div style="font-size:.82rem;font-weight:600;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Permissions</div>
-    <div class="perm-preview-grid">${permList}</div>`;
+    <div style="background:var(--surface-raised);border-radius:var(--radius);padding:14px;margin-top:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:.82rem">
+        <div><span style="color:var(--text-muted)">Status</span><br><strong>${escHtml(m.status||'—')}</strong></div>
+        <div><span style="color:var(--text-muted)">Last Active</span><br><strong>${timeAgo(m.lastActive)}</strong></div>
+        <div><span style="color:var(--text-muted)">Assigned Chats</span><br><strong>${m.assignedChats||0}</strong></div>
+        <div><span style="color:var(--text-muted)">Assigned Tickets</span><br><strong>${m.assignedTickets||0}</strong></div>
+        <div><span style="color:var(--text-muted)">Joined</span><br><strong>${timeAgo(m.joinedAt)}</strong></div>
+      </div>
+    </div>`;
   openModal('view-profile-modal');
 };
 
-/* ── Edit role ──────────────────────────────────────────────── */
-window.editRole = function(memberId) {
+window.editMember = function(uid) {
   closeAllMenus();
-  editingMemberId = memberId;
-  const m = members[memberId];
+  editingMemberId = uid;
+  const m = members[uid];
   if (!m) return;
-  const role = ROLES[m.role] || ROLES.agent;
-  const initials = (m.name || 'U').slice(0, 2).toUpperCase();
 
-  document.getElementById('edit-role-member-info').innerHTML = `
-    <div style="width:40px;height:40px;border-radius:50%;background:var(--glass-active);display:grid;place-items:center;font-weight:700;font-size:.9rem;color:var(--primary);flex-shrink:0">${initials}</div>
-    <div><div style="font-weight:600">${escHtml(m.name||'Unknown')}</div><div style="font-size:.8rem;color:var(--text-secondary)">${escHtml(m.email||'')}</div></div>`;
+  const infoEl = document.getElementById('edit-role-member-info');
+  if (infoEl) infoEl.innerHTML = `
+    <div style="width:36px;height:36px;border-radius:50%;background:var(--glass-active);
+                display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;color:var(--primary)">
+      ${escHtml((m.name||'?')[0].toUpperCase())}
+    </div>
+    <div><div style="font-weight:600">${escHtml(m.name||'Member')}</div>
+    <div style="font-size:.78rem;color:var(--text-muted)">${escHtml(m.email||'')}</div></div>`;
 
-  document.getElementById('edit-role-select').value = m.role || 'agent';
+  const roleSelect = document.getElementById('edit-role-select');
+  if (roleSelect) roleSelect.value = m.role || 'agent';
 
-  buildPermEditor(m.permissions || role.permissions);
+  renderPermissionEditor(m.role || 'agent', m.permissions || {});
   openModal('edit-role-modal');
 };
 
-function buildPermEditor(currentPerms) {
+function renderPermissionEditor(role, overrides) {
   const grid = document.getElementById('perm-editor-grid');
-  grid.innerHTML = ALL_PERMISSIONS.map(p => `
-    <label class="perm-toggle-row">
-      <span>${p}</span>
-      <label class="tt-switch">
-        <input type="checkbox" class="perm-checkbox" data-perm="${p}" ${currentPerms[p] ? 'checked' : ''}>
-        <span class="tt-switch-slider"></span>
-      </label>
+  if (!grid) return;
+  const defaults = ROLES[role]?.permissions || {};
+  const merged   = { ...defaults, ...overrides };
+  grid.innerHTML = ALL_PERMISSIONS.map(perm => `
+    <label class="perm-toggle">
+      <input type="checkbox" class="perm-checkbox" data-perm="${escHtml(perm)}" ${merged[perm]?'checked':''}>
+      <span>${escHtml(perm)}</span>
     </label>`).join('');
-
-  // When role select changes, update the checkboxes
-  document.getElementById('edit-role-select').onchange = function() {
-    const rolePerms = ROLES[this.value]?.permissions || ROLES.agent.permissions;
-    document.querySelectorAll('#perm-editor-grid .perm-checkbox').forEach(cb => {
-      cb.checked = !!rolePerms[cb.dataset.perm];
-    });
-  };
 }
 
-async function saveEditRole() {
-  if (!editingMemberId) return;
-  const roleKey = document.getElementById('edit-role-select').value;
-  const permissions = {};
-  document.querySelectorAll('#perm-editor-grid .perm-checkbox').forEach(cb => {
-    permissions[cb.dataset.perm] = cb.checked;
-  });
+window.toggleMemberMenu = function(e, uid) {
+  e.stopPropagation();
+  document.querySelectorAll('.action-menu.open').forEach(m => { if(m.id!==`menu-${uid}`) m.classList.remove('open'); });
+  document.getElementById(`menu-${uid}`)?.classList.toggle('open');
+};
 
-  try {
-    await db.ref(`businesses/${currentUser.uid}/team/members/${editingMemberId}`).update({ role: roleKey, permissions });
-    toast('Role and permissions updated.', 'success');
-    closeModal('edit-role-modal');
-  } catch {
-    toast('Failed to save changes.', 'error');
-  }
-}
-
-/* ── Suspend member ─────────────────────────────────────────── */
-window.suspendMember = async function(memberId) {
+window.toggleSuspend = async function(uid) {
   closeAllMenus();
-  const m = members[memberId];
+  const m = members[uid];
   if (!m) return;
   const action = m.suspended ? 'Unsuspend' : 'Suspend';
-  if (!confirm(`${action} ${m.name || 'this member'}?`)) return;
-
+  if (!confirm(`${action} ${m.name||'this member'}?`)) return;
   try {
-    await db.ref(`businesses/${currentUser.uid}/team/members/${memberId}`).update({
-      suspended: !m.suspended,
-      status: m.suspended ? 'offline' : 'offline'
-    });
+    await db.ref(`businesses/${workspaceUid}/team/members/${uid}`).update({ suspended: !m.suspended, status: 'offline' });
+    await logActivity(workspaceUid, `${userRec?.name||'Owner'} ${action.toLowerCase()}ed ${m.name}`, { type: 'member_suspended', targetUid: uid });
     toast(`Member ${action.toLowerCase()}ed.`, 'success');
-  } catch {
-    toast('Failed to update member.', 'error');
-  }
+  } catch { toast('Failed to update member.', 'error'); }
 };
 
-/* ── Remove member ──────────────────────────────────────────── */
-window.removeMember = async function(memberId) {
+window.removeMember = async function(uid) {
   closeAllMenus();
-  const m = members[memberId];
+  const m = members[uid];
   if (!m) return;
-  if (!confirm(`Remove ${m.name || 'this member'} from the team? This cannot be undone.`)) return;
+  if (!confirm(`Remove ${m.name||'this member'} from the workspace? This cannot be undone.`)) return;
+  try {
+    await db.ref(`businesses/${workspaceUid}/team/members/${uid}`).remove();
+    // Clean up their userWorkspace entry
+    await firebase.database().ref(`userWorkspace/${uid}`).remove().catch(()=>{});
+    await logActivity(workspaceUid, `${userRec?.name||'Owner'} removed ${m.name} from the workspace`, { type: 'member_removed', targetUid: uid });
+    toast('Member removed.', 'info');
+  } catch { toast('Failed to remove member.', 'error'); }
+};
+
+function setupPermissionPreview() {
+  const roleSelect = document.getElementById('invite-role');
+  if (!roleSelect) return;
+  roleSelect.addEventListener('change', () => {
+    const role  = roleSelect.value;
+    const perms = ROLES[role]?.permissions || {};
+    const grid  = document.getElementById('perm-preview-grid');
+    if (!grid) return;
+    grid.innerHTML = ALL_PERMISSIONS.map(p => `
+      <div class="perm-preview-item">
+        <span class="perm-preview-dot" style="color:${perms[p]?'#10b981':'#ef4444'}">${perms[p]?'✓':'✗'}</span>
+        <span class="perm-preview-label">${escHtml(p)}</span>
+      </div>`).join('');
+  });
+  roleSelect.dispatchEvent(new Event('change'));
+
+  document.getElementById('edit-role-select')?.addEventListener('change', function() {
+    renderPermissionEditor(this.value, {});
+  });
+}
+
+function bindEvents() {
+  // Invite modal
+  document.getElementById('invite-btn')?.addEventListener('click', () => openModal('invite-modal'));
+  document.getElementById('close-invite-modal')?.addEventListener('click', () => closeModal('invite-modal'));
+  document.getElementById('cancel-invite-btn')?.addEventListener('click', () => closeModal('invite-modal'));
+  document.getElementById('invite-modal')?.addEventListener('click', e => { if(e.target.id==='invite-modal') closeModal('invite-modal'); });
+  document.getElementById('send-invite-btn')?.addEventListener('click', sendInvitation);
+
+  // Edit role modal
+  document.getElementById('close-edit-role-modal')?.addEventListener('click', () => closeModal('edit-role-modal'));
+  document.getElementById('cancel-edit-role-btn')?.addEventListener('click',  () => closeModal('edit-role-modal'));
+  document.getElementById('save-edit-role-btn')?.addEventListener('click', saveRoleEdit);
+
+  // View profile modal
+  document.getElementById('close-view-profile-modal')?.addEventListener('click', () => closeModal('view-profile-modal'));
+  document.getElementById('close-profile-btn')?.addEventListener('click', () => closeModal('view-profile-modal'));
+
+  // Close menus on outside click
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.action-menu-wrap')) closeAllMenus();
+  });
+}
+
+async function saveRoleEdit() {
+  if (!editingMemberId) return;
+  const role = document.getElementById('edit-role-select')?.value || 'agent';
+  const perms = {};
+  document.querySelectorAll('.perm-checkbox').forEach(cb => { perms[cb.dataset.perm] = cb.checked; });
 
   try {
-    await db.ref(`businesses/${currentUser.uid}/team/members/${memberId}`).remove();
-    toast('Member removed.', 'info');
-  } catch {
-    toast('Failed to remove member.', 'error');
-  }
-};
+    await db.ref(`businesses/${workspaceUid}/team/members/${editingMemberId}`).update({ role, permissions: perms });
+    // Update userWorkspace role too
+    await firebase.database().ref(`userWorkspace/${editingMemberId}/role`).set(role).catch(()=>{});
+    await logActivity(workspaceUid, `${userRec?.name||'Owner'} changed ${members[editingMemberId]?.name||'member'}'s role to ${role}`, { type: 'role_changed', targetUid: editingMemberId });
+    toast('Role updated.', 'success');
+    closeModal('edit-role-modal');
+  } catch { toast('Failed to save role.', 'error'); }
+}
 
-/* ── Action menu toggle ─────────────────────────────────────── */
-window.toggleMemberMenu = function(e, memberId) {
-  e.stopPropagation();
-  document.querySelectorAll('.action-menu.open').forEach(m => {
-    if (m.id !== `menu-${memberId}`) m.classList.remove('open');
-  });
-  document.getElementById(`menu-${memberId}`)?.classList.toggle('open');
-};
-
-/* ── Modal helpers ──────────────────────────────────────────── */
-function openModal(id) {
-  document.getElementById(id)?.classList.add('open');
-}
-function closeModal(id) {
-  document.getElementById(id)?.classList.remove('open');
-}
-function closeAllMenus() {
-  document.querySelectorAll('.action-menu.open').forEach(m => m.classList.remove('open'));
-}
+function openModal(id)  { document.getElementById(id)?.classList.add('open'); }
+function closeModal(id) { document.getElementById(id)?.classList.remove('open'); }
+function closeAllMenus(){ document.querySelectorAll('.action-menu.open').forEach(m => m.classList.remove('open')); }

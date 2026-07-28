@@ -635,11 +635,11 @@
           /* No match and we don't have their details yet — ask for them */
           state.messages.push({
             role: 'bot',
-            text: "I couldn't find a direct answer to that. Please share your name, email and phone number below and our team will contact you shortly.",
+            text: "I couldn't find a direct answer to that. To connect you with a live agent, please share your name, email and phone number below.",
             id: ++state.msgCounter
           });
           state.showLeadForm = true;
-          saveChat(text, "Couldn't find a FAQ match.");
+          saveChat(text, "Couldn't find a FAQ match — requesting lead details.");
         } else {
           /* We already have their details — just acknowledge */
           state.messages.push({
@@ -663,9 +663,14 @@
           /* Persist so the conversation survives a page reload */
           localStorage.setItem(CID_KEY, state.chatId);
           chatRef.set({
-            visitorId: state.visitorId,
-            createdAt: firebase.database.ServerValue.TIMESTAMP,
-            status:    'open'
+            visitorId:  state.visitorId,
+            createdAt:  firebase.database.ServerValue.TIMESTAMP,
+            updatedAt:  firebase.database.ServerValue.TIMESTAMP,
+            status:     'ai',
+            priority:   'medium',
+            assignedTo: null,
+            customerName:  '',
+            customerEmail: ''
           });
           /* Start listening for agent replies as soon as a chat exists */
           startListeningForAgentMessages();
@@ -732,9 +737,29 @@
       state.showLeadForm = false;
       state.leadCaptured = true;
 
+      /* ── AI HANDOFF: update chat status to waiting_for_agent ── */
+      if (state.chatId) {
+        try {
+          db.ref('businesses/' + businessId + '/chats/' + state.chatId).update({
+            status:        'waiting_for_agent',
+            updatedAt:     firebase.database.ServerValue.TIMESTAMP,
+            customerName:  visitorName,
+            customerEmail: email
+          });
+          /* Write an activity log entry on the chat */
+          db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/activityLog').push({
+            action:    'AI handed off — waiting for agent',
+            byUid:     'system',
+            byName:    'AI Bot',
+            type:      'handoff',
+            timestamp: Date.now()
+          });
+        } catch (e) { /* silent */ }
+      }
+
       state.messages.push({
         role: 'bot',
-        text: 'Thanks, ' + esc(visitorName) + '! Your details have been received. Our team will be in touch shortly. Feel free to keep chatting!',
+        text: 'Thanks, ' + esc(visitorName) + '! Your details have been received. One of our team members will join this chat shortly. Feel free to keep chatting!',
         id: ++state.msgCounter
       });
       render();

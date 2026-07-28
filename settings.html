@@ -133,8 +133,72 @@
             </form>
           </div>
 
+          <!-- ── Workspace Settings ────────────────────────── -->
+          <div class="card animate-fadeUp stagger-1" id="workspace-settings-card">
+            <div class="settings-section-title">🏢 Workspace Settings</div>
+            <div style="font-size:.8rem;color:var(--text-secondary);margin-bottom:16px;line-height:1.6">
+              Configure team behaviour for this workspace. Only owners and admins can change these settings.
+            </div>
+            <form id="workspace-form">
+              <!-- Assignment mode -->
+              <div class="form-group">
+                <label class="form-label">Chat Assignment Mode</label>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 14px;border-radius:8px;border:1px solid var(--border);transition:border-color .15s">
+                    <input type="radio" name="assignment-mode" id="assign-manual" value="manual" style="margin-top:2px">
+                    <div>
+                      <div style="font-size:.875rem;font-weight:600">Manual</div>
+                      <div style="font-size:.78rem;color:var(--text-muted)">Agents pick up conversations from the inbox themselves.</div>
+                    </div>
+                  </label>
+                  <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 14px;border-radius:8px;border:1px solid var(--border);transition:border-color .15s">
+                    <input type="radio" name="assignment-mode" id="assign-auto" value="auto" style="margin-top:2px">
+                    <div>
+                      <div style="font-size:.875rem;font-weight:600">Auto-assign (round-robin)</div>
+                      <div style="font-size:.78rem;color:var(--text-muted)">New conversations are automatically assigned to the next available online agent.</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Toggles -->
+              <div class="form-group">
+                <label class="form-label">Features</label>
+                <div style="display:flex;flex-direction:column;gap:12px">
+
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--border);border-radius:8px">
+                    <div>
+                      <div style="font-size:.875rem;font-weight:600">AI Auto-reply</div>
+                      <div style="font-size:.78rem;color:var(--text-muted)">AI answers visitor questions automatically using your FAQ entries.</div>
+                    </div>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="ai-enabled" checked>
+                      <span class="toggle-track"></span>
+                    </label>
+                  </div>
+
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--border);border-radius:8px">
+                    <div>
+                      <div style="font-size:.875rem;font-weight:600">Widget Enabled</div>
+                      <div style="font-size:.78rem;color:var(--text-muted)">Show or hide the chat widget on your website without removing the code.</div>
+                    </div>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="widget-enabled" checked>
+                      <span class="toggle-track"></span>
+                    </label>
+                  </div>
+
+                </div>
+              </div>
+
+              <button type="submit" id="save-workspace-btn" class="btn btn-primary btn-sm">
+                Save Workspace Settings
+              </button>
+            </form>
+          </div>
+
           <!-- ── FAQ Manager ───────────────────────────────── -->
-          <div class="card animate-fadeUp stagger-1" style="grid-column:1/-1">
+          <div class="card animate-fadeUp stagger-2" id="faq-manager-card" style="grid-column:1/-1">
             <div class="settings-section-title">💡 Chat Widget FAQs</div>
             <div style="font-size:.8rem;color:var(--text-secondary);margin-bottom:16px;line-height:1.6">
               These questions appear as clickable chips in your chat widget. Visitors click them to get instant answers. Add, edit, or delete them here — changes reflect in the widget immediately.

@@ -3,13 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chats — Drexora Support</title>
+  <title>Conversations — Drexora Support</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=3">
-  <script>
-    (function(){if(localStorage.getItem('drexora-theme')==='dark')document.documentElement.classList.add('dark-mode');})();
-  </script>
+  <link rel="stylesheet" href="css/styles.css?v=5">
+  <link rel="stylesheet" href="css/team-tickets.css?v=2">
+  <script>(function(){if(localStorage.getItem('drexora-theme')==='dark')document.documentElement.classList.add('dark-mode');}());</script>
+  <style>
+    .chat-layout { display:flex; height:100vh; overflow:hidden; }
+    .chat-list-col { width:320px; flex-shrink:0; border-right:1px solid var(--border); overflow:hidden; display:flex; flex-direction:column; background:var(--surface); }
+    .chat-detail-col { flex:1; overflow:hidden; display:flex; flex-direction:column; }
+    .filter-bar { display:flex; gap:4px; padding:8px 10px; border-bottom:1px solid var(--border); overflow-x:auto; background:var(--surface-raised); flex-shrink:0; }
+    .filter-bar::-webkit-scrollbar { height:3px; }
+    .filter-btn { padding:5px 12px; border-radius:99px; font-size:.75rem; font-weight:600; border:1px solid var(--border); background:transparent; cursor:pointer; color:var(--text-secondary); white-space:nowrap; transition:all .15s; }
+    .filter-btn:hover { border-color:var(--primary-light); color:var(--text-primary); }
+    .filter-btn.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+    @media (max-width:768px) {
+      .chat-list-col { width:100%; border-right:none; height:280px; flex-shrink:0; }
+      .chat-layout { flex-direction:column; }
+    }
+  </style>
 </head>
 <body>
   <div class="page-bg"></div>
@@ -42,7 +55,10 @@
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           Chats
         </a>
-
+        <a class="nav-item" href="inbox.html">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          Team Inbox
+        </a>
         <a class="nav-item" href="team.html">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Team
@@ -59,53 +75,62 @@
       </nav>
       <div class="sidebar-footer">
         <div class="sidebar-user">
-          <div class="sidebar-avatar" data-user-avatar></div>
+          <div class="sidebar-user-avatar" id="sidebar-user-avatar"></div>
           <div class="sidebar-user-info">
-            <div class="sidebar-user-name" data-user-name>Loading…</div>
-            <div class="sidebar-user-role" data-user-email></div>
+            <div class="sidebar-user-name" id="sidebar-user-name">Loading…</div>
+            <div class="sidebar-user-email" id="sidebar-user-email"></div>
           </div>
-          <button class="sidebar-logout" data-logout title="Sign out">→</button>
+          <button class="btn btn-ghost btn-sm logout-btn" data-logout title="Sign out" style="padding:6px 10px;font-size:.75rem">↩</button>
         </div>
       </div>
     </aside>
 
     <!-- ── Main Content ──────────────────────────────────────── -->
-    <main class="main-content">
-      <header class="topbar">
+    <main class="main-content" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
+
+      <!-- Topbar -->
+      <header class="topbar" style="flex-shrink:0">
         <div>
           <div class="topbar-title">Conversations</div>
-          <div class="topbar-subtitle"><span id="chat-count">0</span> total conversations</div>
+          <div class="topbar-subtitle"><span id="chat-count">0</span> total</div>
         </div>
         <div class="topbar-actions">
-          <button class="theme-toggle" aria-label="Switch to dark mode">
-          <span class="theme-toggle-icon">🌙</span>
-          <span class="theme-toggle-label">Dark</span>
-        </button>
-          <div class="search-wrap" style="max-width:240px">
-            <span class="search-icon">🔍</span>
-            <input class="search-input" type="text" id="chat-search" placeholder="Search conversations…">
+          <button class="theme-toggle">
+            <span class="theme-toggle-icon">🌙</span>
+            <span class="theme-toggle-label">Dark</span>
+          </button>
+          <div style="position:relative">
+            <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--text-muted);pointer-events:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input class="form-input" type="text" id="chat-search" placeholder="Search…" style="padding-left:32px;width:200px;font-size:.83rem">
           </div>
         </div>
       </header>
 
-      <div class="page-body" style="padding:0;display:flex;flex:1;overflow:hidden;height:calc(100vh - 73px)">
+      <!-- Chat layout -->
+      <div class="chat-layout" style="flex:1">
 
-        <!-- Left panel — chat list -->
-        <div id="chat-list" style="
-          width:320px;
-          flex-shrink:0;
-          border-right:1px solid var(--glass-border);
-          overflow-y:auto;
-          background:rgba(10,6,20,.5)
-        ">
-          <div style="text-align:center;padding:60px">
-            <div class="spinner" style="margin:0 auto"></div>
+        <!-- Left: list + filters -->
+        <div class="chat-list-col">
+          <!-- Filter tabs -->
+          <div class="filter-bar">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="mine">Mine</button>
+            <button class="filter-btn" data-filter="waiting_for_agent">Waiting</button>
+            <button class="filter-btn" data-filter="assigned">Assigned</button>
+            <button class="filter-btn" data-filter="resolved">Resolved</button>
+            <button class="filter-btn" data-filter="closed">Closed</button>
+          </div>
+          <!-- List -->
+          <div id="chat-list" style="flex:1;overflow-y:auto">
+            <div style="text-align:center;padding:60px">
+              <div class="spinner" style="margin:0 auto"></div>
+            </div>
           </div>
         </div>
 
-        <!-- Right panel — chat detail -->
-        <div id="chat-detail" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
-          <div class="empty-state">
+        <!-- Right: detail -->
+        <div id="chat-detail" class="chat-detail-col">
+          <div class="empty-state" style="margin:auto">
             <div class="empty-state-icon">💬</div>
             <div class="empty-state-title">Select a conversation</div>
             <div class="empty-state-desc">Choose a chat from the left to view the full conversation.</div>
@@ -123,75 +148,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <script src="js/firebase-config.js"></script>
   <script type="module" src="js/chats.js"></script>
-
-  <style>
-    /* ── Agent reply bar ───────────────────────────────────────── */
-    .agent-reply-bar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 16px;
-      border-top: 1px solid var(--glass-border);
-      background: var(--surface);
-      flex-shrink: 0;
-    }
-    .agent-reply-input {
-      flex: 1;
-      background: var(--input-bg);
-      border: 1.5px solid var(--glass-border);
-      border-radius: 10px;
-      padding: 10px 14px;
-      font-size: .85rem;
-      color: var(--text-primary);
-      outline: none;
-      transition: border-color .15s, background .15s;
-      font-family: inherit;
-    }
-    .agent-reply-input:focus {
-      border-color: var(--primary);
-      background: var(--surface);
-    }
-    .agent-reply-input::placeholder { color: var(--text-muted); }
-    .agent-reply-input:disabled {
-      opacity: .5;
-      cursor: not-allowed;
-    }
-    .agent-reply-send {
-      width: 38px; height: 38px;
-      border-radius: 10px;
-      background: var(--primary);
-      color: var(--text-on-primary);
-      border: none;
-      cursor: pointer;
-      display: grid;
-      place-items: center;
-      flex-shrink: 0;
-      transition: opacity .15s, transform .1s;
-    }
-    .agent-reply-send:hover:not(:disabled)  { opacity: .88; transform: scale(1.04); }
-    .agent-reply-send:active:not(:disabled) { transform: scale(.96); }
-    .agent-reply-send:disabled { opacity: .4; cursor: not-allowed; }
-
-    /* Agent message bubble */
-    .msg.agent { justify-content: flex-end; }
-    .msg.agent .msg-bubble {
-      background: var(--primary);
-      color: var(--text-on-primary);
-      border-radius: 14px 14px 4px 14px;
-    }
-    .msg.agent .msg-time { text-align: right; }
-    .agent-label {
-      font-weight: 600;
-      color: var(--primary);
-      font-size: .7rem;
-    }
-
-    @media (max-width: 768px) {
-      #chat-list  { width: 100%; border-right: none; height: 260px; flex-shrink: 0; }
-      .page-body  { flex-direction: column !important; height: auto !important; overflow: visible !important; }
-      #chat-detail { min-height: 400px; }
-    }
-  </style>
   <script src="js/theme.js"></script>
 </body>
 </html>

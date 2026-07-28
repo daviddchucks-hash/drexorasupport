@@ -1,71 +1,103 @@
 {
   "rules": {
-    "businesses": {
+
+    /* ── userWorkspace lookup ─────────────────────────────── */
+    "userWorkspace": {
       "$uid": {
+        ".read":  "auth != null && auth.uid === $uid",
+        ".write": "auth != null && (auth.uid === $uid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === root.child('userWorkspace').child($uid).child('businessUid').val())"
+      }
+    },
+
+    /* ── Business data ─────────────────────────────────────── */
+    "businesses": {
+      "$businessUid": {
+
+        /* Profile and FAQs are publicly readable (needed by the widget) */
         "profile": {
-          ".read": true,
-          ".write": "auth != null && auth.uid === $uid"
+          ".read":  true,
+          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
         },
         "faqs": {
-          ".read": true,
-          ".write": "auth != null && auth.uid === $uid"
+          ".read":  true,
+          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
         },
+
+        /* Chats: public write (widget visitors), workspace-member read */
         "chats": {
-          ".read": "auth != null && auth.uid === $uid",
+          ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
           ".write": true,
           "$chatId": {
-            ".read": true,
+            ".read":  true,
             ".write": true
           }
         },
+
+        /* Leads: workspace members only */
         "leads": {
-          ".read": "auth != null && auth.uid === $uid",
+          ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
           ".write": true
         },
+
+        /* Tickets: workspace members */
+        "tickets": {
+          ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+        },
+
+        "ticketCounter": {
+          ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+        },
+
+        /* Team members: workspace members can read, owner/admin can write */
         "team": {
           "members": {
-            ".read": "auth != null && auth.uid === $uid",
-            ".write": "auth != null && auth.uid === $uid",
+            ".read": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+            ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
             "$memberId": {
-              ".read": "auth != null && (auth.uid === $uid || auth.uid === $memberId)",
-              ".write": "auth != null && (auth.uid === $uid || auth.uid === $memberId)"
+              ".read":  "auth != null && (auth.uid === $businessUid || auth.uid === $memberId || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+              ".write": "auth != null && (auth.uid === $businessUid || auth.uid === $memberId || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
             }
           },
           "invitations": {
-            ".read": "auth != null && auth.uid === $uid",
-            ".write": "auth != null && auth.uid === $uid",
+            ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+            ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
             "$inviteId": {
-              ".read": "auth != null && auth.uid === $uid",
+              ".read":  "auth != null",
               ".write": "auth != null"
             }
           }
         },
-        "tickets": {
-          ".read": "auth != null && auth.uid === $uid",
-          ".write": "auth != null && auth.uid === $uid",
-          "$ticketId": {
-            ".read": "auth != null && auth.uid === $uid",
-            ".write": "auth != null && auth.uid === $uid",
-            "messages": {
-              ".read": "auth != null && auth.uid === $uid",
-              ".write": "auth != null && auth.uid === $uid"
-            },
-            "notes": {
-              ".read": "auth != null && auth.uid === $uid",
-              ".write": "auth != null && auth.uid === $uid"
-            }
-          }
+
+        /* Settings: workspace members */
+        "settings": {
+          ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
         },
-        "ticketCounter": {
-          ".read": "auth != null && auth.uid === $uid",
-          ".write": "auth != null && auth.uid === $uid"
+
+        /* Activity log: workspace members */
+        "activityLog": {
+          ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+        },
+
+        /* Notifications: workspace members */
+        "notifications": {
+          ".read":  "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+          ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+          "$targetUid": {
+            ".read":  "auth != null && (auth.uid === $businessUid || auth.uid === $targetUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)",
+            ".write": "auth != null && (auth.uid === $businessUid || root.child('userWorkspace').child(auth.uid).child('businessUid').val() === $businessUid)"
+          }
         }
       }
     },
 
+    /* ── Pending invitations (cross-workspace lookup) ──────── */
     "pendingInvitations": {
       "$encodedEmail": {
-        ".read": "auth != null",
+        ".read":  "auth != null",
         ".write": "auth != null"
       }
     }

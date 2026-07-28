@@ -1,16 +1,15 @@
 /**
  * knowledge-base.js — ES6 Module
- * FAQ management: list, add, edit, delete.
+ * Workspace-aware FAQ management.
  */
 
-import { requireAuth, setupSidebar, toast, escHtml } from './app.js';
+import { requireAuth, setupSidebar, toast, escHtml, getWorkspaceUid } from './app.js';
 
-/* ── State ─────────────────────────────────────────────────── */
-let currentUser = null;
-let faqs        = {};   // { faqId: { question, answer, createdAt } }
-let editingId   = null; // null = new FAQ, string = editing existing
+let currentUser  = null;
+let workspaceUid = null;
+let faqs         = {};
+let editingId    = null;
 
-/* ── DOM refs ──────────────────────────────────────────────── */
 const faqList    = document.getElementById('faq-list');
 const modalEl    = document.getElementById('faq-modal');
 const faqForm    = document.getElementById('faq-form');
@@ -23,24 +22,22 @@ const addBtn     = document.getElementById('btn-add-faq');
 const modalClose = document.getElementById('modal-close');
 const modalCancel= document.getElementById('modal-cancel');
 
-/* ── Init ──────────────────────────────────────────────────── */
-requireAuth(user => {
-  currentUser = user;
+requireAuth(async (user, wid) => {
+  currentUser  = user;
+  workspaceUid = wid;
   setupSidebar(user);
-  loadFAQs(user.uid);
+  loadFAQs();
   bindEvents();
 });
 
-/* ── Load FAQs from Realtime DB ────────────────────────────── */
-function loadFAQs(uid) {
+function loadFAQs() {
   const db = firebase.database();
-  db.ref(`businesses/${uid}/faqs`).on('value', snap => {
+  db.ref(`businesses/${workspaceUid}/faqs`).on('value', snap => {
     faqs = snap.val() || {};
     renderFAQs(Object.entries(faqs));
   });
 }
 
-/* ── Render FAQ list ───────────────────────────────────────── */
 function renderFAQs(entries) {
   const query = (searchInp?.value || '').toLowerCase();
   const filtered = entries.filter(([, faq]) =>
@@ -70,13 +67,11 @@ function renderFAQs(entries) {
         <div class="faq-answer">${escHtml(faq.answer)}</div>
       </div>
       <div class="faq-actions">
-        <button class="btn btn-ghost btn-sm" data-edit="${escHtml(id)}" title="Edit">✏️ Edit</button>
-        <button class="btn btn-danger btn-sm" data-delete="${escHtml(id)}" title="Delete">🗑 Delete</button>
+        <button class="btn btn-ghost btn-sm" data-edit="${escHtml(id)}">✏️ Edit</button>
+        <button class="btn btn-danger btn-sm" data-delete="${escHtml(id)}">🗑 Delete</button>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
 
-  // Attach action handlers
   faqList.querySelectorAll('[data-edit]').forEach(btn => {
     btn.addEventListener('click', () => openModal(btn.dataset.edit));
   });
@@ -85,18 +80,15 @@ function renderFAQs(entries) {
   });
 }
 
-/* ── Open modal (add or edit) ──────────────────────────────── */
 function openModal(id = null) {
   editingId = id;
   modalTitle.textContent = id ? 'Edit FAQ' : 'Add New FAQ';
-
   if (id && faqs[id]) {
     inputQ.value = faqs[id].question || '';
     inputA.value = faqs[id].answer   || '';
   } else {
     faqForm.reset();
   }
-
   modalEl.classList.add('open');
   inputQ.focus();
 }
@@ -107,70 +99,47 @@ function closeModal() {
   faqForm.reset();
 }
 
-/* ── Save FAQ ──────────────────────────────────────────────── */
 async function saveFAQ(e) {
   e.preventDefault();
   const question = inputQ.value.trim();
   const answer   = inputA.value.trim();
-
-  if (!question || !answer) {
-    toast('Please fill in both question and answer.', 'warning');
-    return;
-  }
+  if (!question || !answer) { toast('Please fill in both question and answer.', 'warning'); return; }
 
   const db = firebase.database();
-  const uid = currentUser.uid;
-
   try {
     if (editingId) {
-      // Update existing
-      await db.ref(`businesses/${uid}/faqs/${editingId}`).update({ question, answer, updatedAt: firebase.database.ServerValue.TIMESTAMP });
+      await db.ref(`businesses/${workspaceUid}/faqs/${editingId}`).update({
+        question, answer, updatedAt: firebase.database.ServerValue.TIMESTAMP
+      });
       toast('FAQ updated successfully.', 'success');
     } else {
-      // Create new
-      const newRef = db.ref(`businesses/${uid}/faqs`).push();
-      await newRef.set({ question, answer, createdAt: firebase.database.ServerValue.TIMESTAMP });
+      await db.ref(`businesses/${workspaceUid}/faqs`).push({
+        question, answer, createdAt: firebase.database.ServerValue.TIMESTAMP
+      });
       toast('FAQ added successfully.', 'success');
     }
     closeModal();
   } catch (err) {
-    console.error('Save FAQ error:', err);
     toast('Failed to save FAQ. Please try again.', 'error');
   }
 }
 
-/* ── Delete FAQ ────────────────────────────────────────────── */
 async function deleteFAQ(id) {
   if (!confirm('Delete this FAQ? This cannot be undone.')) return;
-
   const db = firebase.database();
   try {
-    await db.ref(`businesses/${currentUser.uid}/faqs/${id}`).remove();
+    await db.ref(`businesses/${workspaceUid}/faqs/${id}`).remove();
     toast('FAQ deleted.', 'success');
-  } catch (err) {
-    console.error('Delete FAQ error:', err);
-    toast('Failed to delete FAQ.', 'error');
-  }
+  } catch { toast('Failed to delete FAQ.', 'error'); }
 }
 
-/* ── Bind global events ────────────────────────────────────── */
 function bindEvents() {
   addBtn?.addEventListener('click', () => openModal());
   modalClose?.addEventListener('click', closeModal);
   modalCancel?.addEventListener('click', closeModal);
   faqForm?.addEventListener('submit', saveFAQ);
-
-  // Close modal on overlay click
-  modalEl?.addEventListener('click', e => {
-    if (e.target === modalEl) closeModal();
-  });
-
-  // Live search filter
-  searchInp?.addEventListener('input', () => {
-    renderFAQs(Object.entries(faqs));
-  });
-
-  // Keyboard escape
+  modalEl?.addEventListener('click', e => { if (e.target === modalEl) closeModal(); });
+  searchInp?.addEventListener('input', () => renderFAQs(Object.entries(faqs)));
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && modalEl?.classList.contains('open')) closeModal();
   });

@@ -96,7 +96,7 @@
       <div class="page-body">
 
 
-        <!-- Stats row -->
+        <!-- Stats row 1 — general -->
         <div class="stats-grid">
           <div class="stat-card animate-fadeUp">
             <div class="stat-icon purple">📋</div>
@@ -106,7 +106,7 @@
           <div class="stat-card animate-fadeUp stagger-1">
             <div class="stat-icon cyan">💬</div>
             <div class="stat-value" id="stat-chats">—</div>
-            <div class="stat-label">Conversations</div>
+            <div class="stat-label">All Conversations</div>
           </div>
           <div class="stat-card animate-fadeUp stagger-2">
             <div class="stat-icon green">💡</div>
@@ -117,6 +117,40 @@
             <div class="stat-icon amber">✅</div>
             <div class="stat-value" id="stat-install">—</div>
             <div class="stat-label">Widget Status</div>
+          </div>
+        </div>
+
+        <!-- Stats row 2 — workspace live metrics -->
+        <div class="stats-grid" style="margin-bottom:24px">
+          <div class="stat-card animate-fadeUp">
+            <div class="stat-icon cyan">🔓</div>
+            <div class="stat-value" id="stat-open-chats">—</div>
+            <div class="stat-label">Open Chats</div>
+          </div>
+          <div class="stat-card animate-fadeUp stagger-1">
+            <div class="stat-icon amber">⏳</div>
+            <div class="stat-value" id="stat-waiting">—</div>
+            <div class="stat-label">Waiting for Agent</div>
+          </div>
+          <div class="stat-card animate-fadeUp stagger-2">
+            <div class="stat-icon green">✅</div>
+            <div class="stat-value" id="stat-resolved-today">—</div>
+            <div class="stat-label">Resolved Today</div>
+          </div>
+          <div class="stat-card animate-fadeUp stagger-3">
+            <div class="stat-icon purple">🤖</div>
+            <div class="stat-value" id="stat-ai-active">—</div>
+            <div class="stat-label">AI Active</div>
+          </div>
+          <div class="stat-card animate-fadeUp stagger-4">
+            <div class="stat-icon green">👤</div>
+            <div class="stat-value" id="stat-online-agents">—</div>
+            <div class="stat-label">Agents Online</div>
+          </div>
+          <div class="stat-card animate-fadeUp stagger-5">
+            <div class="stat-icon amber">🎫</div>
+            <div class="stat-value" id="stat-open-tickets">—</div>
+            <div class="stat-label">Open Tickets</div>
           </div>
         </div>
 
@@ -162,6 +196,9 @@
               </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:10px">
+              <a href="inbox.html" class="btn btn-ghost" style="justify-content:flex-start">
+                📬 Team Inbox
+              </a>
               <a href="knowledge-base.html" class="btn btn-ghost" style="justify-content:flex-start">
                 💡 Manage Knowledge Base
               </a>
@@ -170,6 +207,9 @@
               </a>
               <a href="chats.html" class="btn btn-ghost" style="justify-content:flex-start">
                 💬 View Conversations
+              </a>
+              <a href="team.html" class="btn btn-ghost" style="justify-content:flex-start">
+                👥 Manage Team
               </a>
               <a href="settings.html" class="btn btn-ghost" style="justify-content:flex-start">
                 ⚙️ Business Settings
@@ -213,32 +253,64 @@
           </div>
         </div>
 
-        <!-- Recent leads -->
+        <!-- Recent leads + recent chats (two columns) -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px" class="dashboard-cols">
+
+          <!-- Recent leads -->
+          <div class="card animate-fadeUp">
+            <div class="section-header">
+              <div>
+                <div class="section-title">Recent Leads</div>
+                <div class="section-desc">Latest visitor enquiries</div>
+              </div>
+              <a href="leads.html" class="btn btn-ghost btn-sm">View all →</a>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Name</th><th>Email</th><th>Status</th></tr></thead>
+                <tbody id="recent-leads-body">
+                  <tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-muted)">
+                    <div class="spinner" style="margin:0 auto"></div>
+                  </td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Recent chats -->
+          <div class="card animate-fadeUp stagger-1">
+            <div class="section-header">
+              <div>
+                <div class="section-title">Recent Conversations</div>
+                <div class="section-desc">Latest chat activity</div>
+              </div>
+              <a href="chats.html" class="btn btn-ghost btn-sm">View all →</a>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Visitor</th><th>Status</th><th>Assigned</th></tr></thead>
+                <tbody id="recent-chats-body">
+                  <tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-muted)">
+                    <div class="spinner" style="margin:0 auto"></div>
+                  </td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Online agents -->
         <div class="card animate-fadeUp" style="margin-bottom:28px">
           <div class="section-header">
             <div>
-              <div class="section-title">Recent Leads</div>
-              <div class="section-desc">Latest visitor enquiries</div>
+              <div class="section-title">Online Agents</div>
+              <div class="section-desc">Team members currently active</div>
             </div>
-            <a href="leads.html" class="btn btn-ghost btn-sm">View all →</a>
+            <a href="team.html" class="btn btn-ghost btn-sm">Manage team →</a>
           </div>
-
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Phone</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="recent-leads-body">
-                <tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-muted)">
-                  <div class="spinner" style="margin:0 auto"></div>
-                </td></tr>
-              </tbody>
-            </table>
+          <div id="online-agents-list" style="display:flex;flex-wrap:wrap;gap:12px">
+            <div style="color:var(--text-muted);font-size:.85rem;padding:8px 0">Loading team…</div>
           </div>
         </div>
 

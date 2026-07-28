@@ -1,91 +1,166 @@
 /**
  * chats.js — ES6 Module
- * View conversations collected via the widget.
- * Includes agent reply input so admins can send messages to customers.
+ * Full Workspace-Aware Conversation System.
+ * Supports: assignment, handoff states, internal notes, transfer, ticket creation,
+ * activity log, real-time updates.
  */
 
-import { requireAuth, setupSidebar, toast, formatDate, timeAgo, escHtml } from './app.js';
+import {
+  requireAuth, setupSidebar, toast, formatDate, timeAgo, escHtml,
+  getWorkspaceUid, getCurrentUserRole, getUserRecord, logActivity, pushNotification
+} from './app.js';
+
+/* ── Constants ─────────────────────────────────────────────── */
+const STATUS_CFG = {
+  ai:               { label: 'AI Handling',      badge: 'badge-info',    icon: '🤖' },
+  waiting_for_agent:{ label: 'Waiting for Agent', badge: 'badge-warning', icon: '⏳' },
+  assigned:         { label: 'Assigned',          badge: 'badge-primary', icon: '👤' },
+  resolved:         { label: 'Resolved',          badge: 'badge-success', icon: '✅' },
+  closed:           { label: 'Closed',            badge: 'badge-muted',   icon: '🔒' },
+  open:             { label: 'Open',              badge: 'badge-success', icon: '💬' }
+};
+const PRIORITY_CFG = {
+  low:    { label: 'Low',    badge: 'priority-low'    },
+  medium: { label: 'Medium', badge: 'priority-medium' },
+  high:   { label: 'High',   badge: 'priority-high'   },
+  urgent: { label: 'Urgent', badge: 'priority-urgent' }
+};
 
 /* ── State ─────────────────────────────────────────────────── */
 let currentUser    = null;
+let workspaceUid   = null;
+let userRole       = null;
+let userRec        = null;
 let allChats       = [];
 let selectedChatId = null;
-
-/* ── DOM refs ──────────────────────────────────────────────── */
-const chatList    = document.getElementById('chat-list');
-const chatDetail  = document.getElementById('chat-detail');
-const chatSearch  = document.getElementById('chat-search');
-const chatCount   = document.getElementById('chat-count');
+let teamMembers    = {};
+let filterStatus   = 'all';
+let searchQuery    = '';
+let notesMode      = false;
 
 /* ── Init ──────────────────────────────────────────────────── */
-requireAuth(user => {
-  currentUser = user;
+requireAuth(async (user, wid) => {
+  currentUser  = user;
+  workspaceUid = wid;
+  userRole     = await getCurrentUserRole();
+  userRec      = await getUserRecord();
   setupSidebar(user);
-  loadChats(user.uid);
+  loadTeamMembers();
+  loadChats();
   bindEvents();
+  bindFilterTabs();
 });
 
-/* ── Load chats ────────────────────────────────────────────── */
-function loadChats(uid) {
-  const db = firebase.database();
-  db.ref(`businesses/${uid}/chats`).on('value', snap => {
-    const raw = snap.val() || {};
-    allChats = Object.entries(raw).map(([id, data]) => ({ id, ...data }))
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-    if (chatCount) chatCount.textContent = allChats.length;
-    renderChatList();
-
-    // Re-render open chat if it was updated
-    if (selectedChatId) renderChatDetail(selectedChatId);
-  });
+/* ── Load team members ─────────────────────────────────────── */
+function loadTeamMembers() {
+  firebase.database()
+    .ref(`businesses/${workspaceUid}/team/members`)
+    .on('value', snap => {
+      teamMembers = snap.val() || {};
+    });
 }
 
-/* ── Render left panel (chat list) ────────────────────────── */
-function renderChatList() {
-  const query = (chatSearch?.value || '').toLowerCase();
+/* ── Load chats (real-time) ────────────────────────────────── */
+function loadChats() {
+  const chatList  = document.getElementById('chat-list');
+  const chatCount = document.getElementById('chat-count');
 
-  const filtered = allChats.filter(chat => {
-    if (!query) return true;
-    const msgs = chat.messages ? Object.values(chat.messages) : [];
-    return msgs.some(m => (m.text || '').toLowerCase().includes(query)) ||
-           (chat.visitorId || '').toLowerCase().includes(query);
-  });
+  firebase.database()
+    .ref(`businesses/${workspaceUid}/chats`)
+    .on('value', snap => {
+      const raw = snap.val() || {};
+      allChats = Object.entries(raw)
+        .map(([id, data]) => ({ id, ...data }))
+        .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+
+      if (chatCount) chatCount.textContent = allChats.length;
+      renderChatList();
+      if (selectedChatId) renderChatDetail(selectedChatId);
+    });
+}
+
+/* ── Filter helpers ────────────────────────────────────────── */
+function getFilteredChats() {
+  let chats = [...allChats];
+
+  // Status filter
+  if (filterStatus === 'mine') {
+    chats = chats.filter(c => c.assignedTo === currentUser.uid);
+  } else if (filterStatus === 'waiting') {
+    chats = chats.filter(c => c.status === 'waiting_for_agent');
+  } else if (filterStatus !== 'all') {
+    chats = chats.filter(c => c.status === filterStatus);
+  }
+
+  // Search
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    chats = chats.filter(c => {
+      const msgs = Object.values(c.messages || {});
+      return (c.customerName || '').toLowerCase().includes(q) ||
+             (c.customerEmail || '').toLowerCase().includes(q) ||
+             msgs.some(m => (m.text || '').toLowerCase().includes(q));
+    });
+  }
+
+  return chats;
+}
+
+/* ── Render chat list ──────────────────────────────────────── */
+function renderChatList() {
+  const chatList = document.getElementById('chat-list');
+  if (!chatList) return;
+
+  const filtered = getFilteredChats();
 
   if (!filtered.length) {
     chatList.innerHTML = `
-      <div class="empty-state" style="padding:40px 20px">
-        <div class="empty-state-icon">💬</div>
-        <div class="empty-state-title">${query ? 'No matching chats' : 'No conversations yet'}</div>
-        <div class="empty-state-desc" style="font-size:.75rem">Conversations will appear here when visitors interact with your widget.</div>
+      <div class="empty-state" style="padding:48px 24px;text-align:center">
+        <div style="font-size:2.5rem;margin-bottom:12px">💬</div>
+        <div style="font-weight:600;margin-bottom:6px">${searchQuery ? 'No matching conversations' : 'No conversations here'}</div>
+        <div style="font-size:.8rem;color:var(--text-muted)">
+          ${searchQuery ? 'Try a different search term.' : 'Conversations will appear when visitors chat.'}
+        </div>
       </div>`;
     return;
   }
 
   chatList.innerHTML = filtered.map(chat => {
-    const msgs    = chat.messages ? Object.values(chat.messages) : [];
-    const lastMsg = msgs[msgs.length - 1];
-    const preview = lastMsg ? (lastMsg.text || '').slice(0, 60) : 'No messages';
+    const msgs     = Object.values(chat.messages || {}).sort((a,b) => (a.timestamp||0)-(b.timestamp||0));
+    const lastMsg  = msgs[msgs.length - 1];
+    const preview  = lastMsg ? (lastMsg.text || '').slice(0, 65) : 'No messages';
+    const status   = chat.status || 'open';
+    const sc       = STATUS_CFG[status] || STATUS_CFG.open;
     const isSelected = chat.id === selectedChatId;
+    const assignee   = chat.assignedTo ? (teamMembers[chat.assignedTo]?.name || 'Agent') : null;
+    const unread     = !isSelected && lastMsg?.role !== 'agent';
 
     return `
-      <div class="chat-list-item ${isSelected ? 'selected' : ''}" data-chat-id="${escHtml(chat.id)}"
+      <div class="chat-list-item ${isSelected ? 'selected' : ''}" data-chat-id="${chat.id}"
            style="padding:14px 16px;border-bottom:1px solid var(--glass-border);cursor:pointer;
-                  transition:all .2s;background:${isSelected ? 'rgba(124,58,237,.1)' : 'transparent'}">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-          <span style="font-size:.8rem;font-weight:600">
-            Visitor ${escHtml((chat.visitorId || 'Unknown').slice(-6))}
+                  transition:background .15s;background:${isSelected ? 'rgba(201,162,39,.08)' : 'transparent'}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:8px">
+          <div style="display:flex;align-items:center;gap:6px;min-width:0">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--glass-active);
+                        display:flex;align-items:center;justify-content:center;font-size:.75rem;
+                        font-weight:700;color:var(--primary);flex-shrink:0">
+              ${escHtml((chat.customerName || 'V')[0].toUpperCase())}
+            </div>
+            <span style="font-size:.85rem;font-weight:${unread ? '700' : '600'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              ${escHtml(chat.customerName || 'Visitor ' + (chat.visitorId||'').slice(-4))}
+            </span>
+          </div>
+          <span style="font-size:.7rem;color:var(--text-muted);flex-shrink:0">
+            ${timeAgo(chat.updatedAt || chat.createdAt)}
           </span>
-          <span style="font-size:.7rem;color:var(--text-muted)">${timeAgo(chat.createdAt)}</span>
         </div>
-        <div style="font-size:.78rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        <div style="font-size:.78rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px;padding-left:34px">
           ${escHtml(preview)}
         </div>
-        <div style="margin-top:6px;display:flex;gap:6px">
-          <span class="badge badge-${chat.status === 'open' ? 'success' : 'muted'}" style="font-size:.65rem">
-            ${chat.status || 'open'}
-          </span>
-          <span class="badge badge-muted" style="font-size:.65rem">${msgs.length} msg${msgs.length !== 1 ? 's' : ''}</span>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;padding-left:34px">
+          <span class="badge ${sc.badge}" style="font-size:.65rem">${sc.icon} ${sc.label}</span>
+          ${chat.priority ? `<span class="badge ${PRIORITY_CFG[chat.priority]?.badge || ''}" style="font-size:.65rem">${escHtml(chat.priority)}</span>` : ''}
+          ${assignee ? `<span class="badge badge-muted" style="font-size:.65rem">→ ${escHtml(assignee)}</span>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -96,148 +171,501 @@ function renderChatList() {
       renderChatList();
       renderChatDetail(selectedChatId);
     });
-    el.addEventListener('mouseenter', () => { if (el.dataset.chatId !== selectedChatId) el.style.background = 'rgba(255,255,255,.03)'; });
-    el.addEventListener('mouseleave', () => { if (el.dataset.chatId !== selectedChatId) el.style.background = 'transparent'; });
   });
 }
 
-/* ── Render right panel (chat detail) ─────────────────────── */
+/* ── Render chat detail ────────────────────────────────────── */
 function renderChatDetail(chatId) {
-  const chat = allChats.find(c => c.id === chatId);
+  const detail = document.getElementById('chat-detail');
+  if (!detail) return;
 
+  const chat = allChats.find(c => c.id === chatId);
   if (!chat) {
-    chatDetail.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">💬</div>
-        <div class="empty-state-title">Select a conversation</div>
-        <div class="empty-state-desc">Choose a chat from the left to view the full conversation.</div>
-      </div>`;
+    detail.innerHTML = emptyDetailHtml();
     return;
   }
 
-  const msgs    = chat.messages ? Object.values(chat.messages).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)) : [];
-  const started = chat.createdAt ? new Date(chat.createdAt).toLocaleString() : 'Unknown time';
+  const msgs      = Object.entries(chat.messages || {}).sort((a,b) => (a[1].timestamp||0)-(b[1].timestamp||0));
+  const notes     = Object.entries(chat.internalNotes || {}).sort((a,b) => (a[1].createdAt||0)-(b[1].createdAt||0));
+  const status    = chat.status || 'open';
+  const sc        = STATUS_CFG[status] || STATUS_CFG.open;
+  const assignee  = chat.assignedTo ? (teamMembers[chat.assignedTo] || null) : null;
+  const canEdit   = ['owner','admin','agent'].includes(userRole);
+  const isAssignedToMe = chat.assignedTo === currentUser.uid;
 
-  chatDetail.innerHTML = `
-    <div style="padding:20px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
-      <div>
-        <div style="font-size:.9rem;font-weight:700">Visitor ${escHtml((chat.visitorId || 'Unknown').slice(-6))}</div>
-        <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">Started ${started}</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <span class="badge badge-${chat.status === 'open' ? 'success' : 'muted'}">${chat.status || 'open'}</span>
-        ${chat.status === 'open'
-          ? `<button class="btn btn-ghost btn-sm" data-close-chat="${escHtml(chatId)}">Close chat</button>`
-          : ''}
-        <button class="btn btn-danger btn-sm" data-delete-chat="${escHtml(chatId)}">🗑 Delete</button>
-      </div>
-    </div>
-    <div class="chat-messages" id="messages-area" style="flex:1;overflow-y:auto">
-      ${msgs.length ? msgs.map(msg => `
-        <div class="msg ${msg.role === 'user' ? 'visitor' : msg.role === 'agent' ? 'agent' : 'bot'}">
-          <div class="msg-bubble">${escHtml(msg.text || '')}</div>
-          <div class="msg-time">${msg.role === 'agent' ? '<span class="agent-label">You</span> · ' : ''}${msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+  const agentOptions = Object.entries(teamMembers)
+    .filter(([,m]) => ['owner','admin','agent'].includes(m.role))
+    .map(([id, m]) => `<option value="${id}" ${chat.assignedTo===id?'selected':''}>${escHtml(m.name||m.email)}</option>`)
+    .join('');
+
+  detail.innerHTML = `
+    <!-- ── Header ── -->
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface)">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--glass-active);
+                      display:flex;align-items:center;justify-content:center;font-size:1rem;
+                      font-weight:700;color:var(--primary)">
+            ${escHtml((chat.customerName || 'V')[0].toUpperCase())}
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:.95rem">${escHtml(chat.customerName || 'Unknown Visitor')}</div>
+            <div style="font-size:.78rem;color:var(--text-muted)">${escHtml(chat.customerEmail || chat.visitorId || '—')}</div>
+          </div>
         </div>
-      `).join('') : '<div class="empty-state"><div class="empty-state-desc">No messages in this chat.</div></div>'}
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="badge ${sc.badge}">${sc.icon} ${sc.label}</span>
+          ${chat.priority ? `<span class="badge ${PRIORITY_CFG[chat.priority]?.badge||''}" style="font-size:.72rem">${escHtml(chat.priority)}</span>` : ''}
+          <button class="btn btn-ghost btn-sm" id="chat-detail-close" title="Close panel">✕</button>
+        </div>
+      </div>
     </div>
-    <div class="agent-reply-bar" id="agent-reply-bar">
-      <input
-        type="text"
-        id="agent-reply-input"
-        class="agent-reply-input"
-        placeholder="Reply to customer…"
-        autocomplete="off"
-        ${chat.status !== 'open' ? 'disabled' : ''}
-      >
-      <button
-        id="agent-reply-send"
-        class="agent-reply-send"
-        aria-label="Send reply"
-        ${chat.status !== 'open' ? 'disabled' : ''}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      </button>
+
+    <!-- ── Main body: messages + sidebar ── -->
+    <div style="display:flex;flex:1;overflow:hidden;min-height:0">
+
+      <!-- Messages column -->
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+        <!-- Tabs -->
+        <div style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface-raised)">
+          <button class="chat-tab ${!notesMode?'active':''}" data-tab="messages"
+                  style="padding:10px 16px;font-size:.83rem;font-weight:600;border:none;background:transparent;
+                         cursor:pointer;border-bottom:2px solid ${!notesMode?'var(--primary)':'transparent'};
+                         color:${!notesMode?'var(--primary)':'var(--text-muted)'}">
+            Messages
+          </button>
+          <button class="chat-tab ${notesMode?'active':''}" data-tab="notes"
+                  style="padding:10px 16px;font-size:.83rem;font-weight:600;border:none;background:transparent;
+                         cursor:pointer;border-bottom:2px solid ${notesMode?'var(--primary)':'transparent'};
+                         color:${notesMode?'var(--primary)':'var(--text-muted)'}">
+            Internal Notes (${notes.length})
+          </button>
+        </div>
+
+        <!-- Messages area -->
+        <div id="messages-area" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;${notesMode?'display:none':''}" ${notesMode?'hidden':''}>
+          ${msgs.map(([msgId, msg]) => renderMessage(msg)).join('')}
+          ${!msgs.length ? `<div style="text-align:center;color:var(--text-muted);font-size:.85rem;margin-top:32px">No messages yet</div>` : ''}
+        </div>
+
+        <!-- Notes area -->
+        <div id="notes-area" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;${!notesMode?'display:none':''}" ${!notesMode?'hidden':''}>
+          <div style="background:rgba(201,162,39,.06);border:1px solid rgba(201,162,39,.2);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:.8rem;color:var(--text-secondary)">
+            🔒 Internal notes are only visible to your team. Customers cannot see them.
+          </div>
+          ${notes.map(([,note]) => renderNote(note)).join('')}
+          ${!notes.length ? `<div style="text-align:center;color:var(--text-muted);font-size:.85rem;margin-top:24px">No internal notes yet</div>` : ''}
+        </div>
+
+        <!-- Reply / Note input -->
+        ${canEdit ? `
+        <div style="padding:14px 16px;border-top:1px solid var(--border);background:var(--surface)">
+          <div style="display:flex;gap:10px;align-items:flex-end">
+            <textarea id="reply-input" placeholder="${notesMode ? 'Write an internal note…' : 'Type a reply…'}"
+                      style="flex:1;resize:none;min-height:60px;max-height:140px;padding:10px 12px;
+                             background:var(--input-bg);border:1px solid var(--border);border-radius:8px;
+                             color:var(--text-primary);font-size:.875rem;font-family:inherit;outline:none;
+                             transition:border-color .15s"
+                      rows="2" id="reply-input"></textarea>
+            <button id="send-reply-btn" class="btn btn-primary btn-sm"
+                    style="padding:10px 16px;white-space:nowrap">
+              ${notesMode ? '📝 Note' : '↩ Send'}
+            </button>
+          </div>
+        </div>` : ''}
+      </div>
+
+      <!-- Sidebar info -->
+      <div style="width:240px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;background:var(--surface-raised)">
+        <!-- Customer info -->
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:10px">Customer</div>
+          <div style="font-size:.85rem;font-weight:600;margin-bottom:3px">${escHtml(chat.customerName || 'Unknown')}</div>
+          <div style="font-size:.78rem;color:var(--text-muted)">${escHtml(chat.customerEmail || '—')}</div>
+          <div style="font-size:.75rem;color:var(--text-muted);margin-top:4px">
+            Visitor: ${escHtml((chat.visitorId||'').slice(-8))}
+          </div>
+          <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">
+            Started: ${timeAgo(chat.createdAt)}
+          </div>
+        </div>
+
+        <!-- Assignment -->
+        ${canEdit ? `
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Assigned To</div>
+          <select id="assign-agent-select" class="form-input form-select" style="font-size:.82rem;padding:7px 10px">
+            <option value="">— Unassigned —</option>
+            ${agentOptions}
+          </select>
+          <button id="assign-btn" class="btn btn-ghost btn-sm btn-block" style="margin-top:6px;font-size:.78rem">
+            Assign
+          </button>
+        </div>` : assignee ? `
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Assigned To</div>
+          <div style="font-size:.85rem;font-weight:600">${escHtml(assignee.name||assignee.email)}</div>
+        </div>` : ''}
+
+        <!-- Priority -->
+        ${canEdit ? `
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Priority</div>
+          <select id="priority-select" class="form-input form-select" style="font-size:.82rem;padding:7px 10px">
+            <option value="">— None —</option>
+            ${['low','medium','high','urgent'].map(p => `<option value="${p}" ${chat.priority===p?'selected':''}>${p.charAt(0).toUpperCase()+p.slice(1)}</option>`).join('')}
+          </select>
+          <button id="set-priority-btn" class="btn btn-ghost btn-sm btn-block" style="margin-top:6px;font-size:.78rem">Set Priority</button>
+        </div>` : ''}
+
+        <!-- Actions -->
+        ${canEdit ? `
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Actions</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${status !== 'resolved' ? `<button class="btn btn-success btn-sm" data-action="resolve">✅ Resolve</button>` : ''}
+            ${status !== 'closed'   ? `<button class="btn btn-ghost btn-sm" data-action="close">🔒 Close</button>`   : ''}
+            ${status !== 'assigned' && status !== 'resolved' && status !== 'closed'
+              ? `<button class="btn btn-ghost btn-sm" data-action="assign_me">👤 Assign to Me</button>` : ''}
+            <button class="btn btn-ghost btn-sm" data-action="transfer">🔄 Transfer</button>
+            <button class="btn btn-ghost btn-sm" data-action="create_ticket">🎫 Create Ticket</button>
+            <button class="btn btn-danger btn-sm" data-action="delete">🗑 Delete</button>
+          </div>
+        </div>` : ''}
+
+        <!-- Activity log -->
+        <div style="padding:14px 16px">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Activity</div>
+          <div id="chat-activity-log" style="font-size:.75rem;color:var(--text-muted);display:flex;flex-direction:column;gap:5px">
+            ${renderActivityLog(chat.activityLog)}
+          </div>
+        </div>
+      </div>
     </div>
-    ${chat.status !== 'open' ? `<div style="text-align:center;font-size:.72rem;color:var(--text-muted);padding:6px 0 10px">This conversation is closed — reopen it to reply.</div>` : ''}`;
 
-  // Bind chat actions
-  const closeBtn = chatDetail.querySelector('[data-close-chat]');
-  closeBtn?.addEventListener('click', () => updateChatStatus(chatId, 'closed'));
+    <!-- Transfer modal (hidden) -->
+    <div id="transfer-modal" class="modal-overlay" style="display:none">
+      <div class="modal" style="max-width:400px">
+        <div class="modal-header">
+          <div class="modal-title">Transfer Conversation</div>
+          <button class="modal-close" id="close-transfer-modal">✕</button>
+        </div>
+        <div class="form-group" style="padding:0 0 12px">
+          <label class="form-label">Transfer to</label>
+          <select class="form-input form-select" id="transfer-agent-select">
+            <option value="">Select agent…</option>
+            ${Object.entries(teamMembers)
+              .filter(([id,m]) => id !== currentUser.uid && ['owner','admin','agent'].includes(m.role))
+              .map(([id,m]) => `<option value="${id}">${escHtml(m.name||m.email)} (${m.role})</option>`)
+              .join('')}
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="cancel-transfer-btn">Cancel</button>
+          <button class="btn btn-primary" id="confirm-transfer-btn">Transfer</button>
+        </div>
+      </div>
+    </div>`;
 
-  const deleteBtn = chatDetail.querySelector('[data-delete-chat]');
-  deleteBtn?.addEventListener('click', () => deleteChat(chatId));
+  // Bind detail events
+  bindDetailEvents(chatId, chat);
 
-  // Bind agent reply input
-  const replyInput = document.getElementById('agent-reply-input');
-  const replySend  = document.getElementById('agent-reply-send');
-
-  if (replyInput && replySend) {
-    replySend.addEventListener('click', () => {
-      const text = replyInput.value.trim();
-      if (!text) return;
-      replyInput.value = '';
-      replyInput.focus();
-      sendAgentMessage(chatId, text);
-    });
-
-    replyInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        const text = replyInput.value.trim();
-        if (!text) return;
-        replyInput.value = '';
-        sendAgentMessage(chatId, text);
-      }
-    });
-  }
-
-  // Scroll to bottom
+  // Scroll messages to bottom
   const area = document.getElementById('messages-area');
   if (area) area.scrollTop = area.scrollHeight;
 }
 
-/* ── Send agent message to customer ───────────────────────── */
-async function sendAgentMessage(chatId, text) {
+function renderMessage(msg) {
+  const isAgent   = msg.role === 'agent';
+  const isBot     = msg.role === 'bot';
+  const isVisitor = !isAgent && !isBot;
+  const color     = isAgent ? 'var(--primary)' : isBot ? 'rgba(201,162,39,.1)' : '#f3f4f6';
+  const textColor = isAgent ? '#fff' : 'var(--text-primary)';
+  const align     = isAgent ? 'flex-end' : 'flex-start';
+  const radius    = isAgent ? '14px 14px 3px 14px' : '14px 14px 14px 3px';
+
+  return `
+    <div style="display:flex;flex-direction:column;align-items:${align};gap:3px;max-width:80%;${isAgent?'align-self:flex-end':'align-self:flex-start'}">
+      ${!isAgent ? `<span style="font-size:.7rem;color:var(--text-muted);margin-bottom:1px">${isBot?'🤖 AI Bot':'👤 Visitor'}</span>` : ''}
+      <div style="background:${color};color:${textColor};padding:10px 13px;border-radius:${radius};font-size:.87rem;line-height:1.55;word-break:break-word">
+        ${escHtml(msg.text || '')}
+      </div>
+      <span style="font-size:.68rem;color:var(--text-muted)">${msg.timestamp ? timeAgo(msg.timestamp) : ''}</span>
+    </div>`;
+}
+
+function renderNote(note) {
+  return `
+    <div style="background:rgba(201,162,39,.06);border:1px solid rgba(201,162,39,.15);border-radius:10px;padding:12px 14px">
+      <div style="font-size:.78rem;font-weight:600;color:var(--primary);margin-bottom:5px">
+        📝 ${escHtml(note.agentName || 'Agent')}
+        <span style="font-weight:400;color:var(--text-muted);margin-left:6px">${timeAgo(note.createdAt)}</span>
+      </div>
+      <div style="font-size:.87rem;line-height:1.55;color:var(--text-primary)">${escHtml(note.text||'')}</div>
+    </div>`;
+}
+
+function renderActivityLog(log) {
+  if (!log) return '<span style="color:var(--text-muted)">No activity yet</span>';
+  const entries = Object.values(log).sort((a,b) => (b.timestamp||0)-(a.timestamp||0)).slice(0,8);
+  return entries.map(e => `
+    <div style="padding:4px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text-primary)">${escHtml(e.action||'')}</span>
+      <br><span style="font-size:.7rem">${timeAgo(e.timestamp)}</span>
+    </div>`).join('');
+}
+
+function emptyDetailHtml() {
+  return `<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:12px;color:var(--text-muted)">
+    <div style="font-size:3rem">💬</div>
+    <div style="font-size:1rem;font-weight:600">Select a conversation</div>
+    <div style="font-size:.85rem">Choose a conversation from the list to view it here.</div>
+  </div>`;
+}
+
+/* ── Bind detail-panel events ─────────────────────────────── */
+function bindDetailEvents(chatId, chat) {
   const db = firebase.database();
-  try {
-    await db.ref(`businesses/${currentUser.uid}/chats/${chatId}/messages`).push({
-      role:      'agent',
-      text:      text,
-      timestamp: firebase.database.ServerValue.TIMESTAMP
+
+  // Close detail
+  document.getElementById('chat-detail-close')?.addEventListener('click', () => {
+    selectedChatId = null;
+    document.getElementById('chat-detail').innerHTML = emptyDetailHtml();
+    renderChatList();
+  });
+
+  // Tab switching
+  document.querySelectorAll('.chat-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      notesMode = tab.dataset.tab === 'notes';
+      renderChatDetail(chatId);
     });
-    // loadChats listener will auto-refresh the detail
-  } catch (err) {
-    toast('Failed to send message.', 'error');
-  }
-}
+  });
 
-/* ── Actions ───────────────────────────────────────────────── */
-async function updateChatStatus(id, status) {
-  const db = firebase.database();
-  try {
-    await db.ref(`businesses/${currentUser.uid}/chats/${id}`).update({ status });
-    toast(`Chat marked as ${status}.`, 'success');
-  } catch (err) {
-    toast('Could not update chat status.', 'error');
-  }
-}
+  // Send reply
+  const replyInput = document.getElementById('reply-input');
+  const sendBtn    = document.getElementById('send-reply-btn');
 
-async function deleteChat(id) {
-  if (!confirm('Delete this conversation? This cannot be undone.')) return;
-  const db = firebase.database();
-  try {
-    await db.ref(`businesses/${currentUser.uid}/chats/${id}`).remove();
-    if (selectedChatId === id) {
-      selectedChatId = null;
-      chatDetail.innerHTML = `<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-title">Select a conversation</div></div>`;
+  const send = async () => {
+    const text = replyInput?.value.trim();
+    if (!text) return;
+    replyInput.value = '';
+    try {
+      if (notesMode) {
+        await db.ref(`businesses/${workspaceUid}/chats/${chatId}/internalNotes`).push({
+          agentUid:  currentUser.uid,
+          agentName: userRec?.name || currentUser.email.split('@')[0],
+          text, createdAt: firebase.database.ServerValue.TIMESTAMP
+        });
+        await logActivity(workspaceUid, `Note added by ${userRec?.name || 'Agent'}`, { type: 'note_added', chatId });
+        toast('Note added.', 'success');
+      } else {
+        await db.ref(`businesses/${workspaceUid}/chats/${chatId}/messages`).push({
+          role: 'agent', text,
+          agentUid:  currentUser.uid,
+          agentName: userRec?.name || currentUser.email.split('@')[0],
+          timestamp: firebase.database.ServerValue.TIMESTAMP
+        });
+        await db.ref(`businesses/${workspaceUid}/chats/${chatId}`).update({
+          status:    chat.status === 'waiting_for_agent' ? 'assigned' : chat.status || 'assigned',
+          updatedAt: firebase.database.ServerValue.TIMESTAMP
+        });
+      }
+    } catch {
+      toast('Failed to send.', 'error');
     }
-    toast('Conversation deleted.', 'success');
-  } catch (err) {
-    toast('Failed to delete conversation.', 'error');
+  };
+
+  sendBtn?.addEventListener('click', send);
+  replyInput?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+
+  // Assign
+  document.getElementById('assign-btn')?.addEventListener('click', async () => {
+    const sel = document.getElementById('assign-agent-select');
+    const agentUid = sel?.value;
+    if (!agentUid) { toast('Select an agent.', 'warning'); return; }
+    const agentName = teamMembers[agentUid]?.name || 'Agent';
+    try {
+      await db.ref(`businesses/${workspaceUid}/chats/${chatId}`).update({
+        status:     'assigned',
+        assignedTo: agentUid,
+        assignedBy: currentUser.uid,
+        assignedAt: firebase.database.ServerValue.TIMESTAMP,
+        updatedAt:  firebase.database.ServerValue.TIMESTAMP
+      });
+      // Log activity on the chat
+      await db.ref(`businesses/${workspaceUid}/chats/${chatId}/activityLog`).push({
+        action:    `Assigned to ${agentName}`,
+        byUid:     currentUser.uid,
+        byName:    userRec?.name || 'Agent',
+        type:      'assigned',
+        timestamp: Date.now()
+      });
+      await logActivity(workspaceUid, `${userRec?.name||'Agent'} assigned conversation to ${agentName}`, { type: 'assigned', chatId });
+      await pushNotification(workspaceUid, agentUid, 'assignment',
+        `You have been assigned a conversation by ${userRec?.name||'Agent'}`, { chatId });
+
+      // Update agent's assignedChats count
+      const snap = await db.ref(`businesses/${workspaceUid}/team/members/${agentUid}/assignedChats`).once('value');
+      await db.ref(`businesses/${workspaceUid}/team/members/${agentUid}/assignedChats`).set((snap.val() || 0) + 1);
+
+      toast(`Assigned to ${agentName}.`, 'success');
+    } catch { toast('Failed to assign.', 'error'); }
+  });
+
+  // Priority
+  document.getElementById('set-priority-btn')?.addEventListener('click', async () => {
+    const sel = document.getElementById('priority-select');
+    const priority = sel?.value;
+    await db.ref(`businesses/${workspaceUid}/chats/${chatId}`).update({ priority, updatedAt: firebase.database.ServerValue.TIMESTAMP });
+    toast('Priority updated.', 'success');
+  });
+
+  // Action buttons
+  document.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => handleChatAction(btn.dataset.action, chatId, chat));
+  });
+
+  // Transfer modal
+  document.getElementById('close-transfer-modal')?.addEventListener('click', () => {
+    const modal = document.getElementById('transfer-modal');
+    if (modal) modal.style.display = 'none';
+  });
+  document.getElementById('cancel-transfer-btn')?.addEventListener('click', () => {
+    const modal = document.getElementById('transfer-modal');
+    if (modal) modal.style.display = 'none';
+  });
+  document.getElementById('confirm-transfer-btn')?.addEventListener('click', async () => {
+    const sel = document.getElementById('transfer-agent-select');
+    const targetUid  = sel?.value;
+    if (!targetUid) { toast('Select an agent to transfer to.', 'warning'); return; }
+    const targetName = teamMembers[targetUid]?.name || 'Agent';
+    try {
+      await db.ref(`businesses/${workspaceUid}/chats/${chatId}`).update({
+        status:     'assigned',
+        assignedTo: targetUid,
+        assignedBy: currentUser.uid,
+        assignedAt: firebase.database.ServerValue.TIMESTAMP,
+        updatedAt:  firebase.database.ServerValue.TIMESTAMP
+      });
+      await db.ref(`businesses/${workspaceUid}/chats/${chatId}/activityLog`).push({
+        action:    `Transferred to ${targetName}`,
+        byUid:     currentUser.uid,
+        byName:    userRec?.name || 'Agent',
+        type:      'transferred',
+        timestamp: Date.now()
+      });
+      await logActivity(workspaceUid, `${userRec?.name||'Agent'} transferred conversation to ${targetName}`, { type: 'transferred', chatId });
+      await pushNotification(workspaceUid, targetUid, 'transfer',
+        `A conversation was transferred to you by ${userRec?.name||'Agent'}`, { chatId });
+      const modal = document.getElementById('transfer-modal');
+      if (modal) modal.style.display = 'none';
+      toast(`Transferred to ${targetName}.`, 'success');
+    } catch { toast('Transfer failed.', 'error'); }
+  });
+}
+
+async function handleChatAction(action, chatId, chat) {
+  const db = firebase.database();
+  const ref = db.ref(`businesses/${workspaceUid}/chats/${chatId}`);
+
+  switch (action) {
+    case 'resolve':
+      await ref.update({ status: 'resolved', updatedAt: firebase.database.ServerValue.TIMESTAMP });
+      await db.ref(`businesses/${workspaceUid}/chats/${chatId}/activityLog`).push({
+        action: `Resolved by ${userRec?.name||'Agent'}`, byUid: currentUser.uid,
+        byName: userRec?.name||'Agent', type: 'resolved', timestamp: Date.now()
+      });
+      await logActivity(workspaceUid, `${userRec?.name||'Agent'} resolved a conversation`, { type: 'resolved', chatId });
+      toast('Conversation resolved.', 'success');
+      break;
+
+    case 'close':
+      await ref.update({ status: 'closed', updatedAt: firebase.database.ServerValue.TIMESTAMP });
+      await db.ref(`businesses/${workspaceUid}/chats/${chatId}/activityLog`).push({
+        action: `Closed by ${userRec?.name||'Agent'}`, byUid: currentUser.uid,
+        byName: userRec?.name||'Agent', type: 'closed', timestamp: Date.now()
+      });
+      await logActivity(workspaceUid, `${userRec?.name||'Agent'} closed a conversation`, { type: 'closed', chatId });
+      toast('Conversation closed.', 'success');
+      break;
+
+    case 'assign_me':
+      await ref.update({
+        status: 'assigned', assignedTo: currentUser.uid,
+        assignedBy: currentUser.uid, assignedAt: firebase.database.ServerValue.TIMESTAMP,
+        updatedAt: firebase.database.ServerValue.TIMESTAMP
+      });
+      await db.ref(`businesses/${workspaceUid}/chats/${chatId}/activityLog`).push({
+        action: `Assigned to ${userRec?.name||'Agent'} (self)`, byUid: currentUser.uid,
+        byName: userRec?.name||'Agent', type: 'assigned', timestamp: Date.now()
+      });
+      toast('Assigned to yourself.', 'success');
+      break;
+
+    case 'transfer': {
+      const modal = document.getElementById('transfer-modal');
+      if (modal) modal.style.display = 'flex';
+      break;
+    }
+
+    case 'create_ticket': {
+      try {
+        const snap = await db.ref(`businesses/${workspaceUid}/ticketCounter`).transaction(n => (n || 0) + 1);
+        const num  = snap.snapshot.val();
+        const tid  = `DXS-${String(num).padStart(6, '0')}`;
+        await db.ref(`businesses/${workspaceUid}/tickets/${tid}`).set({
+          ticketId:       tid,
+          conversationId: chatId,
+          customerName:   chat.customerName || 'Unknown',
+          customerEmail:  chat.customerEmail || '',
+          subject:        `Conversation from ${chat.customerName || 'Visitor'}`,
+          status:         'open',
+          priority:       chat.priority || 'medium',
+          channel:        'website',
+          assignedAgent:  chat.assignedTo || '',
+          createdAt:      firebase.database.ServerValue.TIMESTAMP,
+          updatedAt:      firebase.database.ServerValue.TIMESTAMP,
+          messages:       {},
+          notes:          {}
+        });
+        await logActivity(workspaceUid, `${userRec?.name||'Agent'} created ticket ${tid} from conversation`, { type: 'ticket_created', chatId, ticketId: tid });
+        toast(`Ticket ${tid} created.`, 'success');
+      } catch { toast('Failed to create ticket.', 'error'); }
+      break;
+    }
+
+    case 'delete':
+      if (!confirm('Delete this conversation? This cannot be undone.')) return;
+      try {
+        await ref.remove();
+        selectedChatId = null;
+        document.getElementById('chat-detail').innerHTML = emptyDetailHtml();
+        renderChatList();
+        toast('Conversation deleted.', 'success');
+      } catch { toast('Delete failed.', 'error'); }
+      break;
   }
 }
 
-/* ── Bind events ───────────────────────────────────────────── */
+/* ── Bind global events ────────────────────────────────────── */
 function bindEvents() {
-  chatSearch?.addEventListener('input', renderChatList);
+  const chatSearch = document.getElementById('chat-search');
+  chatSearch?.addEventListener('input', e => {
+    searchQuery = e.target.value;
+    renderChatList();
+  });
+}
+
+function bindFilterTabs() {
+  document.querySelectorAll('[data-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      filterStatus = btn.dataset.filter;
+      renderChatList();
+    });
+  });
 }

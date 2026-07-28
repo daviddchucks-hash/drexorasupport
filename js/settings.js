@@ -1,98 +1,121 @@
 /**
  * settings.js — ES6 Module
- * Business settings: profile, branding, widget config, account.
+ * Workspace settings: profile, branding, widget config, auto-assignment,
+ * AI settings, account management.
  */
 
-import { requireAuth, setupSidebar, toast, escHtml, copyToClipboard } from './app.js';
+import {
+  requireAuth, setupSidebar, toast, escHtml, copyToClipboard,
+  getWorkspaceUid, getCurrentUserRole, getUserRecord
+} from './app.js';
 
-/* ── State ─────────────────────────────────────────────────── */
-let currentUser = null;
-let profile     = {};
-let settingsFaqs = {};   // { faqId: { question, answer } }
-let editingFaqId = null; // null = adding new, string = editing existing
+let currentUser  = null;
+let workspaceUid = null;
+let userRole     = null;
+let profile      = {};
+let settingsFaqs = {};
+let editingFaqId = null;
 
-/* ── DOM refs ──────────────────────────────────────────────── */
-const profileForm  = document.getElementById('profile-form');
-const logoInput    = document.getElementById('logo-upload');
-const logoPreview  = document.getElementById('logo-preview');
-const colourInput  = document.getElementById('theme-color');
-const colourSwatches = document.querySelectorAll('.colour-swatch');
-const deleteBtn    = document.getElementById('btn-delete-account');
-const pwForm       = document.getElementById('pw-form');
-const copyCodeBtn  = document.getElementById('copy-code-btn');
-const installCode  = document.getElementById('install-code-display');
+const profileForm = () => document.getElementById('profile-form');
+const logoInput   = () => document.getElementById('logo-upload');
+const logoPreview = () => document.getElementById('logo-preview');
+const colourInput = () => document.getElementById('theme-color');
 
-/* ── Preset colours ────────────────────────────────────────── */
 const PRESET_COLOURS = [
-  '#C9A227', '#E4BC5A', '#D4A843', '#10b981',
-  '#f59e0b', '#ef4444', '#ec4899', '#6366f1',
-  '#0ea5e9', '#14b8a6'
+  '#C9A227','#E4BC5A','#D4A843','#10b981',
+  '#f59e0b','#ef4444','#ec4899','#6366f1',
+  '#0ea5e9','#14b8a6'
 ];
 
-/* ── Init ──────────────────────────────────────────────────── */
-requireAuth(user => {
-  currentUser = user;
+requireAuth(async (user, wid) => {
+  currentUser  = user;
+  workspaceUid = wid;
+  userRole     = await getCurrentUserRole();
   setupSidebar(user);
-  loadProfile(user.uid);
-  loadSettingsFAQs(user.uid);
+  loadProfile();
+  loadSettingsFAQs();
+  loadWorkspaceSettings();
   renderColourSwatches();
   bindEvents();
 });
 
-/* ── Load profile ──────────────────────────────────────────── */
-async function loadProfile(uid) {
+async function loadProfile() {
   const db = firebase.database();
   try {
-    const snap = await db.ref(`businesses/${uid}/profile`).once('value');
+    const snap = await db.ref(`businesses/${workspaceUid}/profile`).once('value');
     profile = snap.val() || {};
     populateForm();
-  } catch (err) {
-    toast('Failed to load settings.', 'error');
-  }
+  } catch { toast('Failed to load settings.', 'error'); }
 }
 
-/* ── Populate form fields ──────────────────────────────────── */
 function populateForm() {
   const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-
-  setVal('biz-name', profile.name);
+  setVal('biz-name',    profile.name);
   setVal('welcome-msg', profile.welcomeMessage);
   setVal('theme-color', profile.themeColor || '#C9A227');
-  setVal('chat-title', profile.chatTitle || '');
+  setVal('chat-title',  profile.chatTitle  || '');
 
-  // Logo preview
-  if (logoPreview) {
-    if (profile.logoUrl) {
-      logoPreview.innerHTML = `<img src="${profile.logoUrl}" alt="logo">`;
-    } else {
-      logoPreview.textContent = (profile.name || 'B').slice(0, 2).toUpperCase();
-    }
+  const lp = logoPreview();
+  if (lp) {
+    lp.innerHTML = profile.logoUrl
+      ? `<img src="${escHtml(profile.logoUrl)}" alt="logo">`
+      : escHtml((profile.name || 'B').slice(0, 2).toUpperCase());
   }
-
-  // Colour swatch active state
   syncSwatchActive(profile.themeColor || '#C9A227');
 
-  // Installation code
+  const installCode = document.getElementById('install-code-display');
   if (installCode) {
-    const snippet = `<script src="https://daviddchucks-hash.github.io/drexorasupport/widget/embed.js" data-business="${currentUser.uid}"><\/script>`;
+    const snippet = `<script src="https://daviddchucks-hash.github.io/drexorasupport/widget/embed.js" data-business="${workspaceUid}"><\/script>`;
     installCode.textContent = snippet;
   }
 }
 
-/* ── Render colour swatches ────────────────────────────────── */
+async function loadWorkspaceSettings() {
+  const db   = firebase.database();
+  const snap = await db.ref(`businesses/${workspaceUid}/settings`).once('value');
+  const s    = snap.val() || {};
+
+  const modeEl = document.getElementById('assignment-mode');
+  if (modeEl) modeEl.value = s.assignment?.mode || 'manual';
+
+  const enabledEl = document.getElementById('auto-assign-enabled');
+  if (enabledEl) enabledEl.checked = s.assignment?.enabled || false;
+
+  const aiEl = document.getElementById('ai-enabled');
+  if (aiEl) aiEl.checked = s.aiEnabled !== false;
+
+  const widgetEl = document.getElementById('widget-enabled');
+  if (widgetEl) widgetEl.checked = s.widgetEnabled !== false;
+}
+
+async function saveWorkspaceSettings() {
+  const mode    = document.getElementById('assignment-mode')?.value    || 'manual';
+  const enabled = document.getElementById('auto-assign-enabled')?.checked || false;
+  const ai      = document.getElementById('ai-enabled')?.checked !== false;
+  const widget  = document.getElementById('widget-enabled')?.checked !== false;
+
+  const db = firebase.database();
+  try {
+    await db.ref(`businesses/${workspaceUid}/settings`).update({
+      'assignment/mode':    mode,
+      'assignment/enabled': enabled,
+      aiEnabled:    ai,
+      widgetEnabled: widget
+    });
+    toast('Workspace settings saved.', 'success');
+  } catch { toast('Failed to save workspace settings.', 'error'); }
+}
+
 function renderColourSwatches() {
   const container = document.getElementById('colour-swatches');
   if (!container) return;
-
   container.innerHTML = PRESET_COLOURS.map(c => `
-    <button type="button" class="colour-swatch" data-colour="${c}"
-            style="background:${c}" title="${c}"></button>
-  `).join('');
-
+    <button type="button" class="colour-swatch" data-colour="${c}" style="background:${c}" title="${c}"></button>`).join('');
   container.querySelectorAll('.colour-swatch').forEach(btn => {
     btn.addEventListener('click', () => {
       const c = btn.dataset.colour;
-      if (colourInput) colourInput.value = c;
+      const ci = colourInput();
+      if (ci) ci.value = c;
       syncSwatchActive(c);
     });
   });
@@ -104,269 +127,184 @@ function syncSwatchActive(colour) {
   });
 }
 
-/* ── Logo upload ───────────────────────────────────────────── */
 async function uploadLogo(file) {
   if (!file) return null;
   if (file.size > 2 * 1024 * 1024) { toast('Logo must be under 2 MB.', 'warning'); return null; }
-  if (!file.type.startsWith('image/')) { toast('Please upload an image file.', 'warning'); return null; }
-
-  toast('Uploading logo…', 'info');
   try {
     const storage = firebase.storage();
-    const ref     = storage.ref(`logos/${currentUser.uid}/${file.name}`);
+    const ref     = storage.ref(`logos/${workspaceUid}/${Date.now()}_${file.name}`);
     await ref.put(file);
-    const url = await ref.getDownloadURL();
-    return url;
-  } catch (err) {
-    console.error('Logo upload error:', err);
-    toast('Logo upload failed. Check Firebase Storage rules.', 'error');
-    return null;
-  }
+    return await ref.getDownloadURL();
+  } catch { toast('Logo upload failed.', 'error'); return null; }
 }
 
-/* ── Save profile ──────────────────────────────────────────── */
 async function saveProfile(e) {
   e.preventDefault();
-
-  const name           = document.getElementById('biz-name')?.value.trim();
-  const welcomeMessage = document.getElementById('welcome-msg')?.value.trim();
-  const themeColor     = document.getElementById('theme-color')?.value || '#C9A227';
-  const chatTitle      = document.getElementById('chat-title')?.value.trim();
-
-  if (!name) { toast('Business name is required.', 'warning'); return; }
-
-  const saveBtn = document.getElementById('save-profile-btn');
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+  const btn = document.getElementById('save-profile-btn');
+  if (btn) { btn.disabled=true; btn.textContent='Saving…'; }
 
   try {
+    const db   = firebase.database();
+    const name = document.getElementById('biz-name')?.value.trim() || '';
+    const welcome = document.getElementById('welcome-msg')?.value.trim() || '';
+    const color   = colourInput()?.value || '#C9A227';
+    const title   = document.getElementById('chat-title')?.value.trim() || '';
+
     let logoUrl = profile.logoUrl || '';
-
-    // Handle logo upload if a new file was selected
-    const logoFile = logoInput?.files?.[0];
-    if (logoFile) {
-      const uploaded = await uploadLogo(logoFile);
-      if (uploaded) logoUrl = uploaded;
+    const file  = logoInput()?.files?.[0];
+    if (file) {
+      const url = await uploadLogo(file);
+      if (url) logoUrl = url;
     }
 
-    const updates = { name, welcomeMessage, themeColor, chatTitle, logoUrl, updatedAt: firebase.database.ServerValue.TIMESTAMP };
-    await firebase.database().ref(`businesses/${currentUser.uid}/profile`).update(updates);
-
-    profile = { ...profile, ...updates };
-    toast('Settings saved successfully!', 'success');
-
-    // Update logo preview
-    if (logoPreview) {
-      if (logoUrl) logoPreview.innerHTML = `<img src="${logoUrl}" alt="logo">`;
-      else logoPreview.textContent = name.slice(0, 2).toUpperCase();
-    }
-  } catch (err) {
-    console.error('Save profile error:', err);
-    toast('Failed to save settings.', 'error');
-  } finally {
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Settings'; }
+    await db.ref(`businesses/${workspaceUid}/profile`).update({ name, welcomeMessage: welcome, themeColor: color, chatTitle: title, logoUrl });
+    profile = { ...profile, name, welcomeMessage: welcome, themeColor: color, chatTitle: title, logoUrl };
+    toast('Settings saved.', 'success');
+  } catch { toast('Failed to save settings.', 'error'); }
+  finally  {
+    if (btn) { btn.disabled=false; btn.textContent='Save Settings'; }
   }
 }
 
-/* ── Change password ───────────────────────────────────────── */
-async function changePassword(e) {
-  e.preventDefault();
-  const current  = document.getElementById('current-pw')?.value;
-  const newPw    = document.getElementById('new-pw')?.value;
-  const confirm  = document.getElementById('confirm-pw')?.value;
-
-  if (newPw !== confirm) { toast('New passwords do not match.', 'warning'); return; }
-  if (newPw.length < 6)  { toast('Password must be at least 6 characters.', 'warning'); return; }
-
-  const pwBtn = document.getElementById('save-pw-btn');
-  if (pwBtn) { pwBtn.disabled = true; pwBtn.textContent = 'Updating…'; }
-
-  try {
-    // Re-authenticate first
-    const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, current);
-    await currentUser.reauthenticateWithCredential(cred);
-    await currentUser.updatePassword(newPw);
-    toast('Password updated successfully.', 'success');
-    pwForm.reset();
-  } catch (err) {
-    const msgs = { 'auth/wrong-password': 'Current password is incorrect.', 'auth/weak-password': 'New password is too weak.' };
-    toast(msgs[err.code] || err.message, 'error');
-  } finally {
-    if (pwBtn) { pwBtn.disabled = false; pwBtn.textContent = 'Update Password'; }
-  }
-}
-
-/* ── Delete account ────────────────────────────────────────── */
-async function deleteAccount() {
-  const confirmed = prompt('Type DELETE to permanently delete your account and all data:');
-  if (confirmed !== 'DELETE') return;
-
-  try {
-    // Remove business data
-    await firebase.database().ref(`businesses/${currentUser.uid}`).remove();
-    // Delete auth account
-    await currentUser.delete();
-    window.location.href = 'index.html';
-  } catch (err) {
-    if (err.code === 'auth/requires-recent-login') {
-      toast('Please sign out and sign back in before deleting your account.', 'warning');
-    } else {
-      toast('Failed to delete account: ' + err.message, 'error');
-    }
-  }
-}
-
-/* ── Load FAQs (real-time) for settings page ───────────────── */
-function loadSettingsFAQs(uid) {
+/* ── FAQs ────────────────────────────────────────────────── */
+async function loadSettingsFAQs() {
   const db = firebase.database();
-  db.ref(`businesses/${uid}/faqs`).on('value', snap => {
+  db.ref(`businesses/${workspaceUid}/faqs`).on('value', snap => {
     settingsFaqs = snap.val() || {};
-    renderSettingsFAQs();
+    renderFAQs();
   });
 }
 
-/* ── Render FAQ list on settings page ──────────────────────── */
-function renderSettingsFAQs() {
-  const list = document.getElementById('settings-faq-list');
+function renderFAQs() {
+  const list = document.getElementById('faq-list');
   if (!list) return;
-
-  const entries = Object.entries(settingsFaqs);
-
-  if (!entries.length) {
-    list.innerHTML = `
-      <div style="text-align:center;padding:24px 16px;color:var(--text-muted);font-size:.85rem">
-        No FAQs yet. Add your first question above — it will appear as a clickable chip in the widget.
-      </div>`;
+  const arr  = Object.entries(settingsFaqs);
+  if (!arr.length) {
+    list.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:.85rem">
+      No FAQs yet. Add your first one below.</div>`;
     return;
   }
-
-  list.innerHTML = entries.map(([id, faq]) => `
-    <div class="faq-settings-item" data-faq-id="${escHtml(id)}" style="
-      display:flex;align-items:flex-start;gap:12px;padding:12px 14px;
-      border:1px solid var(--glass-border);border-radius:10px;margin-bottom:8px;
-      background:var(--glass-bg);transition:background .15s;">
-      <div style="flex:1;min-width:0">
-        <div id="faq-q-display-${escHtml(id)}" style="font-size:.85rem;font-weight:600;color:var(--text-primary);margin-bottom:3px">
-          ❓ ${escHtml(faq.question)}
-        </div>
-        <div id="faq-a-display-${escHtml(id)}" style="font-size:.8rem;color:var(--text-secondary);line-height:1.5">
-          ${escHtml(faq.answer)}
-        </div>
-        <div class="faq-edit-row" id="faq-edit-row-${escHtml(id)}" style="display:none;margin-top:8px;display:none;flex-direction:column;gap:6px">
-          <input class="form-input" type="text" id="faq-edit-q-${escHtml(id)}" value="${escHtml(faq.question)}" placeholder="Question…" style="font-size:.82rem;padding:7px 10px">
-          <input class="form-input" type="text" id="faq-edit-a-${escHtml(id)}" value="${escHtml(faq.answer)}" placeholder="Answer…" style="font-size:.82rem;padding:7px 10px">
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-primary btn-sm" onclick="saveInlineEditFAQ('${escHtml(id)}')">Save</button>
-            <button class="btn btn-ghost btn-sm" onclick="cancelInlineEditFAQ('${escHtml(id)}')">Cancel</button>
-          </div>
-        </div>
+  list.innerHTML = arr.map(([id, faq]) => `
+    <div class="faq-item">
+      <div class="faq-item-body">
+        <div class="faq-question">${escHtml(faq.question)}</div>
+        <div class="faq-answer">${escHtml(faq.answer)}</div>
       </div>
-      <div style="display:flex;gap:6px;flex-shrink:0">
-        <button class="btn btn-ghost btn-sm" onclick="startInlineEditFAQ('${escHtml(id)}')" title="Edit">✏️</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteSettingsFAQ('${escHtml(id)}')" title="Delete">🗑</button>
+      <div class="faq-actions">
+        <button class="btn btn-ghost btn-sm" onclick="editFaq('${escHtml(id)}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteFaq('${escHtml(id)}')">Delete</button>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
-/* ── Inline FAQ edit helpers (exposed to onclick) ──────────── */
-window.startInlineEditFAQ = function(id) {
-  const row = document.getElementById(`faq-edit-row-${id}`);
-  const qEl = document.getElementById(`faq-q-display-${id}`);
-  const aEl = document.getElementById(`faq-a-display-${id}`);
-  if (row)  { row.style.display = 'flex'; }
-  if (qEl)  { qEl.style.display = 'none'; }
-  if (aEl)  { aEl.style.display = 'none'; }
-  editingFaqId = id;
-};
-
-window.cancelInlineEditFAQ = function(id) {
-  const row = document.getElementById(`faq-edit-row-${id}`);
-  const qEl = document.getElementById(`faq-q-display-${id}`);
-  const aEl = document.getElementById(`faq-a-display-${id}`);
-  if (row)  { row.style.display = 'none'; }
-  if (qEl)  { qEl.style.display = ''; }
-  if (aEl)  { aEl.style.display = ''; }
-  editingFaqId = null;
-};
-
-window.saveInlineEditFAQ = async function(id) {
-  const qInput = document.getElementById(`faq-edit-q-${id}`);
-  const aInput = document.getElementById(`faq-edit-a-${id}`);
-  const question = qInput?.value.trim();
-  const answer   = aInput?.value.trim();
-  if (!question || !answer) { toast('Both question and answer are required.', 'warning'); return; }
-
-  try {
-    await firebase.database()
-      .ref(`businesses/${currentUser.uid}/faqs/${id}`)
-      .update({ question, answer, updatedAt: firebase.database.ServerValue.TIMESTAMP });
-    toast('FAQ updated.', 'success');
-    editingFaqId = null;
-  } catch (err) {
-    toast('Failed to update FAQ.', 'error');
-  }
-};
-
-window.deleteSettingsFAQ = async function(id) {
+window.deleteFaq = async function(id) {
   if (!confirm('Delete this FAQ?')) return;
-  try {
-    await firebase.database().ref(`businesses/${currentUser.uid}/faqs/${id}`).remove();
-    toast('FAQ deleted.', 'success');
-  } catch (err) {
-    toast('Failed to delete FAQ.', 'error');
-  }
+  await firebase.database().ref(`businesses/${workspaceUid}/faqs/${id}`).remove();
+  toast('FAQ deleted.', 'info');
 };
 
-/* ── Add new FAQ from inline form ──────────────────────────── */
-async function addSettingsFAQ(e) {
-  e.preventDefault();
-  const qInput = document.getElementById('faq-q-input');
-  const aInput = document.getElementById('faq-a-input');
-  const question = qInput?.value.trim();
-  const answer   = aInput?.value.trim();
+window.editFaq = function(id) {
+  editingFaqId = id;
+  const faq = settingsFaqs[id];
+  if (!faq) return;
+  const q = document.getElementById('faq-question');
+  const a = document.getElementById('faq-answer');
+  if (q) q.value = faq.question;
+  if (a) a.value = faq.answer;
+  const btn = document.getElementById('faq-add-btn');
+  if (btn) btn.textContent = 'Update FAQ';
+};
 
-  if (!question || !answer) { toast('Please fill in both question and answer.', 'warning'); return; }
+async function addSettingsFAQ(e) {
+  e?.preventDefault();
+  const q = document.getElementById('faq-question')?.value.trim();
+  const a = document.getElementById('faq-answer')?.value.trim();
+  if (!q || !a) { toast('Both fields are required.', 'warning'); return; }
 
   const btn = document.getElementById('faq-add-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  if (btn) { btn.disabled=true; btn.textContent='Saving…'; }
 
   try {
-    await firebase.database()
-      .ref(`businesses/${currentUser.uid}/faqs`)
-      .push({ question, answer, createdAt: firebase.database.ServerValue.TIMESTAMP });
-    toast('FAQ added! It\'s now live in the widget.', 'success');
-    if (qInput) qInput.value = '';
-    if (aInput) aInput.value = '';
-  } catch (err) {
-    toast('Failed to add FAQ.', 'error');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '+ Add FAQ'; }
+    const db = firebase.database();
+    if (editingFaqId) {
+      await db.ref(`businesses/${workspaceUid}/faqs/${editingFaqId}`).update({ question: q, answer: a });
+      editingFaqId = null;
+      toast('FAQ updated.', 'success');
+    } else {
+      await db.ref(`businesses/${workspaceUid}/faqs`).push({ question: q, answer: a, createdAt: firebase.database.ServerValue.TIMESTAMP });
+      toast('FAQ added! It\'s now live in the widget.', 'success');
+    }
+    const qEl = document.getElementById('faq-question');
+    const aEl = document.getElementById('faq-answer');
+    if (qEl) qEl.value = '';
+    if (aEl) aEl.value = '';
+  } catch { toast('Failed to save FAQ.', 'error'); }
+  finally  {
+    if (btn) { btn.disabled=false; btn.textContent='+ Add FAQ'; }
   }
 }
 
-/* ── Bind events ───────────────────────────────────────────── */
+/* ── Password & Account ──────────────────────────────────── */
+async function changePassword(e) {
+  e.preventDefault();
+  const current = document.getElementById('current-pw')?.value;
+  const newPw   = document.getElementById('new-pw')?.value;
+  const confirm = document.getElementById('confirm-pw')?.value;
+  if (newPw !== confirm) { toast('Passwords do not match.', 'warning'); return; }
+  if (!newPw || newPw.length < 6) { toast('Password must be at least 6 characters.', 'warning'); return; }
+
+  try {
+    const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, current);
+    await currentUser.reauthenticateWithCredential(cred);
+    await currentUser.updatePassword(newPw);
+    toast('Password updated.', 'success');
+    document.getElementById('pw-form')?.reset();
+  } catch (err) {
+    if (err.code === 'auth/wrong-password') toast('Current password is incorrect.', 'error');
+    else toast(err.message, 'error');
+  }
+}
+
+async function deleteAccount() {
+  if (userRole !== 'owner') { toast('Only the workspace owner can delete the account.', 'warning'); return; }
+  const pw = prompt('Enter your password to confirm account deletion:');
+  if (!pw) return;
+  try {
+    const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, pw);
+    await currentUser.reauthenticateWithCredential(cred);
+    await firebase.database().ref(`businesses/${workspaceUid}`).remove();
+    await firebase.database().ref(`userWorkspace/${currentUser.uid}`).remove();
+    await currentUser.delete();
+    window.location.href = 'register.html';
+  } catch (err) {
+    if (err.code === 'auth/wrong-password') toast('Incorrect password.', 'error');
+    else toast(err.message, 'error');
+  }
+}
+
 function bindEvents() {
-  profileForm?.addEventListener('submit', saveProfile);
-  pwForm?.addEventListener('submit', changePassword);
-  deleteBtn?.addEventListener('click', deleteAccount);
-
-  // FAQ inline form
+  profileForm()?.addEventListener('submit', saveProfile);
+  document.getElementById('pw-form')?.addEventListener('submit', changePassword);
+  document.getElementById('btn-delete-account')?.addEventListener('click', deleteAccount);
   document.getElementById('faq-inline-form')?.addEventListener('submit', addSettingsFAQ);
+  document.getElementById('save-workspace-settings-btn')?.addEventListener('click', saveWorkspaceSettings);
 
-  // Live logo preview
-  logoInput?.addEventListener('change', () => {
-    const file = logoInput.files?.[0];
-    if (file && logoPreview) {
+  logoInput()?.addEventListener('change', () => {
+    const file = logoInput()?.files?.[0];
+    if (file) {
       const reader = new FileReader();
-      reader.onload = e => { logoPreview.innerHTML = `<img src="${e.target.result}" alt="logo">`; };
+      reader.onload = ev => {
+        const lp = logoPreview();
+        if (lp) lp.innerHTML = `<img src="${ev.target.result}" alt="logo">`;
+      };
       reader.readAsDataURL(file);
     }
   });
 
-  // Colour input sync to swatches
-  colourInput?.addEventListener('input', e => syncSwatchActive(e.target.value));
+  colourInput()?.addEventListener('input', e => syncSwatchActive(e.target.value));
 
-  // Copy install code
+  const copyCodeBtn = document.getElementById('copy-code-btn');
+  const installCode = document.getElementById('install-code-display');
   copyCodeBtn?.addEventListener('click', () => {
     const code = installCode?.textContent;
     if (code) copyToClipboard(code, copyCodeBtn);
