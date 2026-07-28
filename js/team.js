@@ -73,6 +73,7 @@ requireAuth(user => {
   setupSidebar(user);
   bindEvents();
   loadTeam();
+  loadIncomingInvitations();
   setupPermissionPreview();
 });
 
@@ -231,6 +232,134 @@ function renderInvitations() {
     </div>`;
   }).join('')}</div>`;
 }
+
+/* ── Incoming invitations (sent TO this user by other workspaces) ───── */
+async function loadIncomingInvitations() {
+  try {
+    const encodedEmail = currentUser.email.replace(/./g, ',');
+    // Live listener so new invites appear without a page refresh
+    db.ref('pendingInvitations/' + encodedEmail).on('value', async snap => {
+      const raw = snap.val() || {};
+      const enriched = await Promise.all(
+        Object.entries(raw).map(async ([key, invite]) => {
+          let businessName = invite.invitedBy || invite.businessUid;
+          try {
+            const pSnap = await db
+              .ref('businesses/' + invite.businessUid + '/profile/name')
+              .once('value');
+            if (pSnap.val()) businessName = pSnap.val();
+          } catch (_) {}
+          return [key, { ...invite, businessName }];
+        })
+      );
+      renderIncomingInvitations(Object.fromEntries(enriched));
+    });
+  } catch (err) {
+    console.warn('[Drexora] loadIncomingInvitations error:', err);
+  }
+}
+
+function renderIncomingInvitations(incomingMap) {
+  const card      = document.getElementById('incoming-invitations-card');
+  const container = document.getElementById('incoming-invitations-container');
+  const badge     = document.getElementById('incoming-badge');
+  if (!card || !container) return;
+
+  const entries = Object.entries(incomingMap);
+  if (badge) badge.textContent = entries.length || '';
+
+  if (!entries.length) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = '';
+
+  container.innerHTML = '<div class="invitations-list">' +
+    entries.map(([key, inv]) => {
+      const role     = ROLES[inv.role] || ROLES.agent;
+      const initials = (inv.businessName || 'W').slice(0, 2).toUpperCase();
+      const safeKey  = escHtml(key);
+      const safeBizUid   = escHtml(inv.businessUid || '');
+      const safeBizInvId = escHtml(inv.businessInviteId || '');
+      const safeName     = escHtml(inv.name || '');
+      const safeRole     = escHtml(inv.role || 'agent');
+      return (
+        '<div class="invitation-item animate-fadeUp" id="incoming-item-' + safeKey + '">' +
+          '<div class="member-avatar">' +
+            '<div class="member-avatar-fallback" style="background:rgba(99,102,241,.18);color:var(--primary)">' + initials + '</div>' +
+          '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div class="member-name">' + escHtml(inv.businessName || inv.businessUid) + '</div>' +
+            '<div class="member-email">Invited by ' + escHtml(inv.invitedBy || 'unknown') + ' &nbsp;&middot;&nbsp; ' + timeAgo(inv.createdAt) + '</div>' +
+          '</div>' +
+          '<span class="badge ' + role.color + '">' + role.label + '</span>' +
+          '<div style="display:flex;gap:8px;flex-shrink:0">' +
+            '<button class="btn btn-primary btn-sm" ' +
+              'onclick="acceptIncomingInvitation('' + safeKey + '','' + safeBizUid + '','' + safeBizInvId + '','' + safeName + '','' + safeRole + '',this)">' +
+              '&#10003; Accept' +
+            '</button>' +
+            '<button class="btn btn-ghost btn-sm" ' +
+              'onclick="declineIncomingInvitation('' + safeKey + '',this)">Decline</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('') +
+  '</div>';
+}
+
+/* ── Accept incoming invitation ───────────────────────────────── */
+window.acceptIncomingInvitation = async function(inviteKey, businessUid, businessInviteId, invitedName, role, btn) {
+  btn.disabled    = true;
+  btn.textContent = 'Joining…';
+  try {
+    const encodedEmail = currentUser.email.replace(/./g, ',');
+
+    // 1. Add user to the business team/members.
+    //    Rule: auth.uid === $memberId allows invited users to write their own record.
+    await db.ref('businesses/' + businessUid + '/team/members/' + currentUser.uid).set({
+      name:            invitedName || currentUser.email.split('@')[0],
+      email:           currentUser.email,
+      role:            role || 'agent',
+      status:          'online',
+      lastActive:      Date.now(),
+      assignedTickets: 0,
+      photoUrl:        currentUser.photoURL || '',
+      uid:             currentUser.uid,
+      joinedAt:        Date.now()
+    });
+
+    // 2. Remove the business-level invitation record (non-fatal if denied)
+    if (businessInviteId) {
+      await db.ref('businesses/' + businessUid + '/team/invitations/' + businessInviteId)
+        .remove().catch(() => {});
+    }
+
+    // 3. Remove from pendingInvitations — triggers the live listener
+    //    which will re-render the section automatically.
+    await db.ref('pendingInvitations/' + encodedEmail + '/' + inviteKey).remove();
+
+    toast('You have joined the team!', 'success');
+  } catch (err) {
+    btn.disabled    = false;
+    btn.textContent = '✓ Accept';
+    toast('Failed to accept invitation. Please try again.', 'error');
+    console.error('[Drexora] acceptIncomingInvitation:', err);
+  }
+};
+
+/* ── Decline incoming invitation ──────────────────────────────── */
+window.declineIncomingInvitation = async function(inviteKey, btn) {
+  if (!confirm('Decline this invitation?')) return;
+  btn.disabled = true;
+  try {
+    const encodedEmail = currentUser.email.replace(/./g, ',');
+    await db.ref('pendingInvitations/' + encodedEmail + '/' + inviteKey).remove();
+    toast('Invitation declined.', 'info');
+  } catch (err) {
+    btn.disabled = false;
+    toast('Failed to decline invitation.', 'error');
+  }
+};
 
 /* ── Update stats ───────────────────────────────────────────── */
 function updateStats() {

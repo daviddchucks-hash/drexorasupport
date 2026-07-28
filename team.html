@@ -122,6 +122,23 @@
           </div>
         </div>
 
+        <!-- Incoming Invitations (sent TO this user from other workspaces) -->
+        <!-- Hidden by default; JS shows it when pendingInvitations has entries -->
+        <div class="card animate-fadeUp" id="incoming-invitations-card" style="margin-bottom:20px;border-color:rgba(99,102,241,.35);background:rgba(99,102,241,.06);display:none">
+          <div class="card-header">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div>
+                <div class="section-title" style="display:flex;align-items:center;gap:8px">
+                  Team Invitations
+                  <span id="incoming-badge" style="background:var(--primary);color:#fff;font-size:.7rem;font-weight:700;padding:2px 7px;border-radius:99px;min-width:20px;text-align:center"></span>
+                </div>
+                <div class="section-desc">You have been invited to join another workspace</div>
+              </div>
+            </div>
+          </div>
+          <div id="incoming-invitations-container"></div>
+        </div>
+
         <!-- Members Table -->
         <div class="card animate-fadeUp" style="margin-bottom:20px">
           <div class="card-header">
