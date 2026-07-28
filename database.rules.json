@@ -11,8 +11,20 @@
           ".write": "auth != null && auth.uid === $uid"
         },
         "chats": {
+          /* Dashboard (authenticated admin) can list and read all chats */
           ".read": "auth != null && auth.uid === $uid",
-          ".write": true
+          /* Widget (anonymous) can create new chats */
+          ".write": true,
+          "$chatId": {
+            /* Widget can read its own specific chat by knowing the chatId.
+               The chatId is a long random Firebase push key — it acts as a
+               capability token. Anyone who knows the ID can read that chat,
+               but they cannot enumerate all chats (blocked by the parent rule). */
+            ".read": true,
+            /* Anyone can write messages into a specific chat
+               (widget sends user messages; dashboard sends agent replies) */
+            ".write": true
+          }
         },
         "leads": {
           ".read": "auth != null && auth.uid === $uid",
