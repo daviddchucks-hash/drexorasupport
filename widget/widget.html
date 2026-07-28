@@ -106,10 +106,8 @@
     .bubble.bot    { align-self: flex-start; background: #ede9fe; color: var(--ink); border-top-left-radius: 4px; }
     .bubble.user   { align-self: flex-end;   background: var(--primary); color: #fff; border-top-right-radius: 4px; }
     .bubble.system { align-self: center; background: #f3f4f6; color: var(--muted); font-size: 11px; padding: 6px 12px; }
-    /* Agent messages (sent from the control panel) */
-    .agent-wrap    { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; max-width: 82%; gap: 3px; }
-    .bubble.agent  { background: #064e3b; color: #fff; border-top-right-radius: 4px; align-self: stretch; }
-    .agent-label   { font-size: 10px; color: var(--muted); padding-right: 2px; }
+    /* Agent messages — identical look to bot/AI messages */
+    .bubble.agent  { align-self: flex-start; background: #ede9fe; color: var(--ink); border-top-left-radius: 4px; }
 
     /* Typing indicator */
     .typing {
@@ -500,10 +498,7 @@
         ? '<div class="typing"><span></span><span></span><span></span></div>'
         : state.messages.map(function (m) {
             if (m.role === 'agent') {
-              return '<div class="agent-wrap">' +
-                '<span class="agent-label">Support Agent</span>' +
-                '<div class="bubble agent">' + esc(m.text) + '</div>' +
-                '</div>';
+              return '<div class="bubble agent">' + esc(m.text) + '</div>';
             }
             return '<div class="bubble ' + m.role + '">' + esc(m.text) + '</div>';
           }).join('');
