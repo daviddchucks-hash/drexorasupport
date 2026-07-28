@@ -8,7 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=2">
+  <link rel="stylesheet" href="css/styles.css?v=3">
+  <script>
+    (function(){if(localStorage.getItem('drexora-theme')==='dark')document.documentElement.classList.add('dark-mode');})();
+  </script>
   <style>
     /* Landing-page only overrides */
     body { background: transparent; }
@@ -30,6 +33,10 @@
       <a href="#pricing">Pricing</a>
     </div>
     <div class="navbar-cta">
+      <button class="theme-toggle" aria-label="Switch to dark mode">
+          <span class="theme-toggle-icon">🌙</span>
+          <span class="theme-toggle-label">Dark</span>
+        </button>
       <a href="login.html" class="btn btn-ghost btn-sm">Sign In</a>
       <a href="register.html" class="btn btn-primary btn-sm">Get Started Free</a>
     </div>
@@ -251,5 +258,6 @@
       observer.observe(el);
     });
   </script>
+  <script src="js/theme.js"></script>
 </body>
 </html>

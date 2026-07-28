@@ -6,9 +6,18 @@
   <title>Sign In — Drexora Support</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=2">
+  <link rel="stylesheet" href="css/styles.css?v=3">
+  <script>
+    (function(){if(localStorage.getItem('drexora-theme')==='dark')document.documentElement.classList.add('dark-mode');})();
+  </script>
 </head>
 <body class="landing-body">
+  <div style="position:fixed;top:18px;right:20px;z-index:300">
+    <button class="theme-toggle" aria-label="Switch to dark mode">
+      <span class="theme-toggle-icon">🌙</span>
+      <span class="theme-toggle-label">Dark</span>
+    </button>
+  </div>
   <div class="page-bg"></div>
 
   <div class="auth-page">
@@ -95,5 +104,6 @@
       });
     }
   </script>
+  <script src="js/theme.js"></script>
 </body>
 </html>
