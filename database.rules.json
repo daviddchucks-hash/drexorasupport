@@ -36,7 +36,7 @@
             ".write": "auth != null && auth.uid === $uid",
             "$inviteId": {
               ".read": "auth != null && auth.uid === $uid",
-              ".write": "auth != null && (auth.uid === $uid || (auth != null && root.child('pendingInvitations').child(auth.token.email.replace(/[.]/g, ',')).child($inviteId).exists()))"
+              ".write": "auth != null"
             }
           }
         },
