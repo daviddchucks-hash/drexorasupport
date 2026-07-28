@@ -1,0 +1,12 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+
+# Replit internal (not part of the static site)
+.agents/
+.replit
+.replitignore

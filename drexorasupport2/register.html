@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register — Drexora Support</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css?v=3">
+  <script>
+    (function(){if(localStorage.getItem('drexora-theme')==='dark')document.documentElement.classList.add('dark-mode');})();
+  </script>
+</head>
+<body class="landing-body">
+  <div style="position:fixed;top:18px;right:20px;z-index:300">
+    <button class="theme-toggle" aria-label="Switch to dark mode">
+      <span class="theme-toggle-icon">🌙</span>
+      <span class="theme-toggle-label">Dark</span>
+    </button>
+  </div>
+  <div class="page-bg"></div>
+
+  <div class="auth-page">
+    <div class="auth-card animate-fadeUp">
+
+      <!-- Logo -->
+      <div class="auth-logo">
+        <img src="images/logo.png" alt="Drexora" class="auth-logo-img">
+        <span class="auth-logo-text">Drexora <strong>Support</strong></span>
+      </div>
+
+      <h1 class="auth-title">Create your account</h1>
+      <p class="auth-subtitle">Set up your business and start collecting leads today.</p>
+
+      <!-- Error message -->
+      <div id="error-msg" style="
+        display:none;
+        background:rgba(239,68,68,.1);
+        border:1px solid rgba(239,68,68,.3);
+        border-radius:8px;
+        padding:12px 14px;
+        font-size:.875rem;
+        color:#fca5a5;
+        margin-bottom:16px;
+      "></div>
+
+      <!-- Register form -->
+      <form id="register-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="business-name">Business Name</label>
+          <input class="form-input" type="text" id="business-name" placeholder="e.g. Acme Corp" required autocomplete="organization">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="email">Email Address</label>
+          <input class="form-input" type="email" id="email" placeholder="you@business.com" required autocomplete="email">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input class="form-input" type="password" id="password" placeholder="Minimum 6 characters" required autocomplete="new-password">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="confirm-password">Confirm Password</label>
+          <input class="form-input" type="password" id="confirm-password" placeholder="Repeat your password" required autocomplete="new-password">
+        </div>
+
+        <div style="margin-bottom:16px;font-size:.78rem;color:var(--text-muted);line-height:1.6">
+          By registering, you agree to our
+          <a href="#" style="color:var(--primary-light)">Terms of Service</a> and
+          <a href="#" style="color:var(--primary-light)">Privacy Policy</a>.
+        </div>
+
+        <button class="btn btn-primary btn-block" type="submit" id="btn-submit">
+          Create Account
+        </button>
+      </form>
+
+      <div class="auth-footer">
+        Already have an account? <a href="login.html">Sign in</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <!-- Firebase CDN SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <!-- Firebase init (must run before modules) -->
+  <script src="js/firebase-config.js"></script>
+  <!-- Page module -->
+  <script type="module" src="js/register.js"></script>
+  <script src="js/theme.js"></script>
+</body>
+</html>
