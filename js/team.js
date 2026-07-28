@@ -81,18 +81,40 @@ requireAuth(user => {
 function loadTeam() {
   const uid = currentUser.uid;
 
+  // Safety net: if no data arrives within 6 s, clear the skeletons so the
+  // user isn't stuck staring at an indefinite loading state.
+  let membersLoaded = false;
+  let invitesLoaded = false;
+  setTimeout(() => {
+    if (!membersLoaded) { membersLoaded = true; renderMembers(); updateStats(); }
+    if (!invitesLoaded) { invitesLoaded = true; renderInvitations(); }
+  }, 6000);
+
   // Listen for members
   db.ref(`businesses/${uid}/team/members`).on('value', snap => {
+    membersLoaded = true;
     members = snap.val() || {};
+    renderMembers();
+    updateStats();
+  }, err => {
+    // Permission denied — database rules likely not yet deployed to Firebase console
+    console.warn('[Drexora] team/members read failed:', err.message,
+      '\nFix: deploy database.rules.json to Firebase via the console or "firebase deploy --only database".');
+    membersLoaded = true;
     renderMembers();
     updateStats();
   });
 
   // Listen for invitations
   db.ref(`businesses/${uid}/team/invitations`).on('value', snap => {
+    invitesLoaded = true;
     invitations = snap.val() || {};
     renderInvitations();
     updateStats();
+  }, err => {
+    console.warn('[Drexora] team/invitations read failed:', err.message);
+    invitesLoaded = true;
+    renderInvitations();
   });
 
   // Add owner as first member if team is empty
@@ -111,10 +133,11 @@ function loadTeam() {
           uid: currentUser.uid,
           joinedAt: Date.now()
         };
-        db.ref(`businesses/${uid}/team/members/${currentUser.uid}`).set(ownerMember);
-      });
+        db.ref(`businesses/${uid}/team/members/${currentUser.uid}`).set(ownerMember)
+          .catch(e => console.warn('[Drexora] owner member write failed:', e.message));
+      }).catch(() => {});
     }
-  });
+  }).catch(e => console.warn('[Drexora] team/members once failed:', e.message));
 }
 
 /* ── Render members table ───────────────────────────────────── */
@@ -294,12 +317,8 @@ function renderIncomingInvitations(incomingMap) {
           '</div>' +
           '<span class="badge ' + role.color + '">' + role.label + '</span>' +
           '<div style="display:flex;gap:8px;flex-shrink:0">' +
-            '<button class="btn btn-primary btn-sm" ' +
-              'onclick="acceptIncomingInvitation('' + safeKey + '','' + safeBizUid + '','' + safeBizInvId + '','' + safeName + '','' + safeRole + '',this)">' +
-              '&#10003; Accept' +
-            '</button>' +
-            '<button class="btn btn-ghost btn-sm" ' +
-              'onclick="declineIncomingInvitation('' + safeKey + '',this)">Decline</button>' +
+            `<button class="btn btn-primary btn-sm" onclick="acceptIncomingInvitation('${safeKey}','${safeBizUid}','${safeBizInvId}','${safeName}','${safeRole}',this)">&#10003; Accept</button>` +
+            `<button class="btn btn-ghost btn-sm" onclick="declineIncomingInvitation('${safeKey}',this)">Decline</button>` +
           '</div>' +
         '</div>'
       );
