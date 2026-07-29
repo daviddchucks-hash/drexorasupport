@@ -2,7 +2,7 @@
  * chats.js — ES6 Module
  * Full Workspace-Aware Conversation System.
  * Supports: assignment, handoff states, internal notes, transfer, ticket creation,
- * activity log, real-time updates.
+ * activity log, real-time updates, canned responses, CSAT end-conversation flow.
  */
 
 import {
@@ -17,7 +17,8 @@ const STATUS_CFG = {
   assigned:         { label: 'Assigned',          badge: 'badge-primary', icon: '👤' },
   resolved:         { label: 'Resolved',          badge: 'badge-success', icon: '✅' },
   closed:           { label: 'Closed',            badge: 'badge-muted',   icon: '🔒' },
-  open:             { label: 'Open',              badge: 'badge-success', icon: '💬' }
+  open:             { label: 'Open',              badge: 'badge-success', icon: '💬' },
+  ended:            { label: 'Ended',             badge: 'badge-muted',   icon: '🏁' }
 };
 const PRIORITY_CFG = {
   low:    { label: 'Low',    badge: 'priority-low'    },
@@ -37,6 +38,8 @@ let teamMembers    = {};
 let filterStatus   = 'all';
 let searchQuery    = '';
 let notesMode      = false;
+let cannedResponses = {};
+let showCannedPicker = false;
 
 /* ── Init ──────────────────────────────────────────────────── */
 requireAuth(async (user, wid) => {
@@ -47,6 +50,7 @@ requireAuth(async (user, wid) => {
   setupSidebar(user);
   loadTeamMembers();
   loadChats();
+  loadCannedResponses();
   bindEvents();
   bindFilterTabs();
 });
@@ -57,6 +61,15 @@ function loadTeamMembers() {
     .ref(`businesses/${workspaceUid}/team/members`)
     .on('value', snap => {
       teamMembers = snap.val() || {};
+    });
+}
+
+/* ── Load canned responses ─────────────────────────────────── */
+function loadCannedResponses() {
+  firebase.database()
+    .ref(`businesses/${workspaceUid}/cannedResponses`)
+    .on('value', snap => {
+      cannedResponses = snap.val() || {};
     });
 }
 
@@ -83,7 +96,6 @@ function loadChats() {
 function getFilteredChats() {
   let chats = [...allChats];
 
-  // Status filter
   if (filterStatus === 'mine') {
     chats = chats.filter(c => c.assignedTo === currentUser.uid);
   } else if (filterStatus === 'waiting') {
@@ -92,7 +104,6 @@ function getFilteredChats() {
     chats = chats.filter(c => c.status === filterStatus);
   }
 
-  // Search
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
     chats = chats.filter(c => {
@@ -168,6 +179,7 @@ function renderChatList() {
   chatList.querySelectorAll('[data-chat-id]').forEach(el => {
     el.addEventListener('click', () => {
       selectedChatId = el.dataset.chatId;
+      showCannedPicker = false;
       renderChatList();
       renderChatDetail(selectedChatId);
     });
@@ -191,22 +203,18 @@ function renderChatDetail(chatId) {
   const sc        = STATUS_CFG[status] || STATUS_CFG.open;
   const assignee  = chat.assignedTo ? (teamMembers[chat.assignedTo] || null) : null;
   const isAssignedToMe   = chat.assignedTo === currentUser.uid;
-  // ── Granular role permissions ───────────────────────────────
-  // canAssignOthers: only owner/admin can assign conversations to specific agents
   const canAssignOthers  = ['owner','admin'].includes(userRole);
-  // canReply: owner/admin always; agent only if THIS chat is assigned to them
-  const canReply         = ['owner','admin'].includes(userRole) ||
-                           (userRole === 'agent' && isAssignedToMe);
-  // canAct: owner/admin or agent assigned to this chat (resolve, close, etc.)
+  const canReply         = (['owner','admin'].includes(userRole) ||
+                            (userRole === 'agent' && isAssignedToMe)) &&
+                           status !== 'ended' && status !== 'closed' && status !== 'resolved';
   const canAct           = ['owner','admin'].includes(userRole) ||
                            (userRole === 'agent' && isAssignedToMe);
-  // canClaimSelf: agents can claim unassigned chats for themselves
   const canClaimSelf     = userRole === 'agent' && !chat.assignedTo;
-  // canRequestAssign: agents/viewers not assigned to this chat can request it
   const canRequestAssign = (userRole === 'agent' || userRole === 'viewer') &&
                            !isAssignedToMe &&
-                           chat.status !== 'resolved' && chat.status !== 'closed';
+                           chat.status !== 'resolved' && chat.status !== 'closed' && chat.status !== 'ended';
   const isViewer         = userRole === 'viewer';
+  const isEnded          = status === 'ended';
 
   const agentOptions = Object.entries(teamMembers)
     .filter(([,m]) => ['owner','admin','agent'].includes(m.role))
@@ -231,6 +239,7 @@ function renderChatDetail(chatId) {
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span class="badge ${sc.badge}">${sc.icon} ${sc.label}</span>
           ${chat.priority ? `<span class="badge ${PRIORITY_CFG[chat.priority]?.badge||''}" style="font-size:.72rem">${escHtml(chat.priority)}</span>` : ''}
+          ${isEnded && chat.csatScore ? `<span class="badge badge-success" style="font-size:.72rem">★ CSAT ${chat.csatScore}/5</span>` : ''}
           <button class="btn btn-ghost btn-sm" id="chat-detail-close" title="Close panel">✕</button>
         </div>
       </div>
@@ -274,18 +283,49 @@ function renderChatDetail(chatId) {
 
         <!-- Reply / Note input -->
         ${canReply ? `
+        <div style="border-top:1px solid var(--border);background:var(--surface)">
+          <!-- Canned response picker (hidden by default) -->
+          <div id="canned-picker" style="display:${showCannedPicker?'block':'none'};max-height:220px;overflow-y:auto;border-bottom:1px solid var(--border);padding:8px">
+            <div style="font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;padding:4px 8px 8px">
+              Canned Responses — click to insert
+            </div>
+            <div style="position:relative;padding:0 8px 8px">
+              <input type="text" id="canned-picker-search" placeholder="Search responses…"
+                style="width:100%;padding:7px 10px;font-size:.8rem;border:1px solid var(--border);border-radius:6px;
+                       background:var(--input-bg);color:var(--text-primary);outline:none">
+            </div>
+            <div id="canned-picker-list" style="display:flex;flex-direction:column;gap:4px;padding:0 4px">
+              ${renderCannedPickerItems('')}
+            </div>
+          </div>
+          <!-- Input row -->
+          <div style="padding:14px 16px">
+            <div style="display:flex;gap:10px;align-items:flex-end">
+              <textarea id="reply-input" placeholder="${notesMode ? 'Write an internal note…' : 'Type a reply…'}"
+                        style="flex:1;resize:none;min-height:60px;max-height:140px;padding:10px 12px;
+                               background:var(--input-bg);border:1px solid var(--border);border-radius:8px;
+                               color:var(--text-primary);font-size:.875rem;font-family:inherit;outline:none;
+                               transition:border-color .15s"
+                        rows="2"></textarea>
+              <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+                ${!notesMode ? `
+                <button id="canned-toggle-btn" class="btn btn-ghost btn-sm" title="Canned Responses"
+                        style="padding:8px 10px;font-size:.75rem">
+                  💬 Canned
+                </button>` : ''}
+                <button id="send-reply-btn" class="btn btn-primary btn-sm"
+                        style="padding:10px 16px;white-space:nowrap">
+                  ${notesMode ? '📝 Note' : '↩ Send'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>` : isEnded ? `
         <div style="padding:14px 16px;border-top:1px solid var(--border);background:var(--surface)">
-          <div style="display:flex;gap:10px;align-items:flex-end">
-            <textarea id="reply-input" placeholder="${notesMode ? 'Write an internal note…' : 'Type a reply…'}"
-                      style="flex:1;resize:none;min-height:60px;max-height:140px;padding:10px 12px;
-                             background:var(--input-bg);border:1px solid var(--border);border-radius:8px;
-                             color:var(--text-primary);font-size:.875rem;font-family:inherit;outline:none;
-                             transition:border-color .15s"
-                      rows="2"></textarea>
-            <button id="send-reply-btn" class="btn btn-primary btn-sm"
-                    style="padding:10px 16px;white-space:nowrap">
-              ${notesMode ? '📝 Note' : '↩ Send'}
-            </button>
+          <div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:8px;
+                      padding:12px 14px;text-align:center">
+            <div style="font-size:.85rem;font-weight:600;color:var(--success);margin-bottom:4px">🏁 Conversation Ended</div>
+            <div style="font-size:.78rem;color:var(--text-muted)">This conversation has ended. The customer has been asked to rate their experience.</div>
           </div>
         </div>` : canRequestAssign ? `
         <div style="padding:14px 16px;border-top:1px solid var(--border);background:var(--surface)">
@@ -360,17 +400,32 @@ function renderChatDetail(chatId) {
         <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
           <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">Actions</div>
           <div style="display:flex;flex-direction:column;gap:6px">
-            ${canAct && status !== 'resolved' ? `<button class="btn btn-success btn-sm" data-action="resolve">✅ Resolve</button>` : ''}
-            ${canAct && status !== 'closed'   ? `<button class="btn btn-ghost btn-sm"   data-action="close">🔒 Close</button>`   : ''}
-            ${canClaimSelf && status !== 'assigned' && status !== 'resolved' && status !== 'closed'
+            ${canAct && status !== 'resolved' && status !== 'ended' ? `<button class="btn btn-success btn-sm" data-action="resolve">✅ Resolve</button>` : ''}
+            ${canAct && status !== 'closed' && status !== 'ended'   ? `<button class="btn btn-ghost btn-sm"   data-action="close">🔒 Close</button>`   : ''}
+            ${canAct && status !== 'ended' && status !== 'resolved' && status !== 'closed'
+              ? `<button class="btn btn-primary btn-sm" data-action="end_with_csat" style="background:linear-gradient(135deg,#10b981,#059669)">🏁 End & Request CSAT</button>` : ''}
+            ${canClaimSelf && status !== 'assigned' && status !== 'resolved' && status !== 'closed' && status !== 'ended'
               ? `<button class="btn btn-ghost btn-sm" data-action="assign_me">👤 Assign to Me</button>` : ''}
-            ${canAssignOthers && status !== 'assigned' && status !== 'resolved' && status !== 'closed'
+            ${canAssignOthers && status !== 'assigned' && status !== 'resolved' && status !== 'closed' && status !== 'ended'
               ? `<button class="btn btn-ghost btn-sm" data-action="assign_me">👤 Assign to Me</button>` : ''}
             ${canAssignOthers ? `<button class="btn btn-ghost btn-sm" data-action="transfer">🔄 Transfer</button>` : ''}
             ${canAct          ? `<button class="btn btn-ghost btn-sm" data-action="create_ticket">🎫 Create Ticket</button>` : ''}
             ${canAssignOthers ? `<button class="btn btn-danger btn-sm" data-action="delete">🗑 Delete</button>` : ''}
           </div>
         </div>
+
+        <!-- CSAT result (if available) -->
+        ${isEnded && chat.csatScore ? `
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">CSAT Rating</div>
+          <div style="font-size:1.2rem;color:#f59e0b">${'★'.repeat(chat.csatScore)}${'☆'.repeat(5-chat.csatScore)}</div>
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:3px">${chat.csatScore}/5 stars</div>
+          ${chat.csatComment ? `<div style="font-size:.78rem;color:var(--text-secondary);margin-top:6px;font-style:italic">"${escHtml(chat.csatComment)}"</div>` : ''}
+        </div>` : isEnded ? `
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:6px">CSAT Rating</div>
+          <div style="font-size:.8rem;color:var(--text-muted);font-style:italic">Awaiting customer rating…</div>
+        </div>` : ''}
 
         <!-- Activity log -->
         <div style="padding:14px 16px">
@@ -404,6 +459,33 @@ function renderChatDetail(chatId) {
           <button class="btn btn-primary" id="confirm-transfer-btn">Transfer</button>
         </div>
       </div>
+    </div>
+
+    <!-- End Conversation + CSAT modal -->
+    <div id="end-csat-modal" class="modal-overlay" style="display:none">
+      <div class="modal" style="max-width:440px">
+        <div class="modal-header">
+          <div class="modal-title">🏁 End Conversation & Request CSAT</div>
+          <button class="modal-close" id="close-end-csat-modal">✕</button>
+        </div>
+        <div style="font-size:.875rem;color:var(--text-secondary);line-height:1.6;margin-bottom:16px">
+          Are you done helping this customer? A goodbye message will be sent and then the customer will be asked to rate their experience (1–5 stars).
+          <br><br>
+          <strong>Once ended, the customer cannot send new messages</strong> — they will need to start a new conversation.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Goodbye Message</label>
+          <textarea class="form-input" id="goodbye-msg-input" rows="3"
+            style="resize:vertical"
+            placeholder="Thank you for reaching out! We hope we were able to help. Have a great day! 😊">Thank you for reaching out! We hope we were able to help. Please take a moment to rate your experience — it helps us improve. Have a great day! 😊</textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="cancel-end-csat-btn">Cancel</button>
+          <button class="btn btn-primary" id="confirm-end-csat-btn" style="background:linear-gradient(135deg,#10b981,#059669)">
+            ✅ Yes, End & Send CSAT
+          </button>
+        </div>
+      </div>
     </div>`;
 
   // Bind detail events
@@ -412,6 +494,36 @@ function renderChatDetail(chatId) {
   // Scroll messages to bottom
   const area = document.getElementById('messages-area');
   if (area) area.scrollTop = area.scrollHeight;
+}
+
+/* ── Canned picker items HTML ──────────────────────────────── */
+function renderCannedPickerItems(query) {
+  const entries = Object.entries(cannedResponses).filter(([,r]) => {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return (r.title||'').toLowerCase().includes(q) || (r.body||'').toLowerCase().includes(q) || (r.category||'').toLowerCase().includes(q);
+  });
+
+  if (!entries.length) {
+    return `<div style="text-align:center;padding:16px 8px;font-size:.8rem;color:var(--text-muted)">
+      ${Object.keys(cannedResponses).length === 0
+        ? 'No canned responses yet. <a href="canned-responses.html" style="color:var(--primary)">Add some →</a>'
+        : 'No matching responses.'}
+    </div>`;
+  }
+
+  return entries.map(([id, r]) => `
+    <button type="button" data-canned-id="${escHtml(id)}"
+            style="text-align:left;padding:8px 10px;border-radius:6px;background:var(--glass-bg);
+                   border:1px solid var(--border);width:100%;transition:background .12s;cursor:pointer;
+                   font-family:inherit"
+            onmouseenter="this.style.background='var(--glass-hover)'"
+            onmouseleave="this.style.background='var(--glass-bg)'">
+      <div style="font-size:.8rem;font-weight:700;color:var(--text-primary)">${escHtml(r.title||'Untitled')}
+        ${r.category ? `<span style="font-weight:400;color:var(--text-muted);margin-left:4px">· ${escHtml(r.category)}</span>` : ''}
+      </div>
+      <div style="font-size:.75rem;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${escHtml((r.body||'').slice(0, 80))}</div>
+    </button>`).join('');
 }
 
 function renderMessage(msg) {
@@ -469,6 +581,7 @@ function bindDetailEvents(chatId, chat) {
   // Close detail
   document.getElementById('chat-detail-close')?.addEventListener('click', () => {
     selectedChatId = null;
+    showCannedPicker = false;
     document.getElementById('chat-detail').innerHTML = emptyDetailHtml();
     renderChatList();
   });
@@ -477,9 +590,28 @@ function bindDetailEvents(chatId, chat) {
   document.querySelectorAll('.chat-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       notesMode = tab.dataset.tab === 'notes';
+      showCannedPicker = false;
       renderChatDetail(chatId);
     });
   });
+
+  // Canned response toggle
+  document.getElementById('canned-toggle-btn')?.addEventListener('click', () => {
+    showCannedPicker = !showCannedPicker;
+    const picker = document.getElementById('canned-picker');
+    if (picker) picker.style.display = showCannedPicker ? 'block' : 'none';
+  });
+
+  // Canned picker search
+  document.getElementById('canned-picker-search')?.addEventListener('input', e => {
+    const list = document.getElementById('canned-picker-list');
+    if (list) list.innerHTML = renderCannedPickerItems(e.target.value.trim());
+    // Re-bind click after innerHTML update
+    wireCannedPickerClicks();
+  });
+
+  // Wire initial canned clicks
+  wireCannedPickerClicks();
 
   // Send reply
   const replyInput = document.getElementById('reply-input');
@@ -489,6 +621,7 @@ function bindDetailEvents(chatId, chat) {
     const text = replyInput?.value.trim();
     if (!text) return;
     replyInput.value = '';
+    showCannedPicker = false;
     try {
       if (notesMode) {
         await db.ref(`businesses/${workspaceUid}/chats/${chatId}/internalNotes`).push({
@@ -520,12 +653,10 @@ function bindDetailEvents(chatId, chat) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
 
-  // Request Assignment (agent/viewer who is not assigned to this chat)
+  // Request Assignment
   document.getElementById('request-assign-btn')?.addEventListener('click', async () => {
-    const db = firebase.database();
     const myName = userRec?.name || currentUser.email.split('@')[0];
     try {
-      // Notify all owners/admins in the workspace
       const membersSnap = await db.ref(`businesses/${workspaceUid}/team/members`).once('value');
       const members = membersSnap.val() || {};
       const admins  = Object.entries(members).filter(([,m]) => ['owner','admin'].includes(m.role));
@@ -561,7 +692,6 @@ function bindDetailEvents(chatId, chat) {
         assignedAt: firebase.database.ServerValue.TIMESTAMP,
         updatedAt:  firebase.database.ServerValue.TIMESTAMP
       });
-      // Log activity on the chat
       await db.ref(`businesses/${workspaceUid}/chats/${chatId}/activityLog`).push({
         action:    `Assigned to ${agentName}`,
         byUid:     currentUser.uid,
@@ -572,11 +702,8 @@ function bindDetailEvents(chatId, chat) {
       await logActivity(workspaceUid, `${userRec?.name||'Agent'} assigned conversation to ${agentName}`, { type: 'assigned', chatId });
       await pushNotification(workspaceUid, agentUid, 'assignment',
         `You have been assigned a conversation by ${userRec?.name||'Agent'}`, { chatId });
-
-      // Update agent's assignedChats count
       const snap = await db.ref(`businesses/${workspaceUid}/team/members/${agentUid}/assignedChats`).once('value');
       await db.ref(`businesses/${workspaceUid}/team/members/${agentUid}/assignedChats`).set((snap.val() || 0) + 1);
-
       toast(`Assigned to ${agentName}.`, 'success');
     } catch { toast('Failed to assign.', 'error'); }
   });
@@ -631,6 +758,84 @@ function bindDetailEvents(chatId, chat) {
       toast(`Transferred to ${targetName}.`, 'success');
     } catch { toast('Transfer failed.', 'error'); }
   });
+
+  // End + CSAT modal
+  document.getElementById('close-end-csat-modal')?.addEventListener('click', () => {
+    document.getElementById('end-csat-modal').style.display = 'none';
+  });
+  document.getElementById('cancel-end-csat-btn')?.addEventListener('click', () => {
+    document.getElementById('end-csat-modal').style.display = 'none';
+  });
+  document.getElementById('confirm-end-csat-btn')?.addEventListener('click', () => endConversationWithCsat(chatId, chat));
+}
+
+/* ── Wire canned picker click handlers ─────────────────────── */
+function wireCannedPickerClicks() {
+  document.querySelectorAll('[data-canned-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.cannedId;
+      const r  = cannedResponses[id];
+      if (!r) return;
+      const input = document.getElementById('reply-input');
+      if (input) {
+        input.value = r.body || '';
+        input.focus();
+      }
+      showCannedPicker = false;
+      const picker = document.getElementById('canned-picker');
+      if (picker) picker.style.display = 'none';
+    });
+  });
+}
+
+/* ── End conversation + trigger CSAT ───────────────────────── */
+async function endConversationWithCsat(chatId, chat) {
+  const goodbyeMsg = document.getElementById('goodbye-msg-input')?.value.trim() ||
+    'Thank you for reaching out! Please take a moment to rate your experience. Have a great day! 😊';
+  const confirmBtn = document.getElementById('confirm-end-csat-btn');
+  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Ending…'; }
+
+  try {
+    const db = firebase.database();
+
+    // 1. Send goodbye message
+    await db.ref(`businesses/${workspaceUid}/chats/${chatId}/messages`).push({
+      role:      'agent',
+      text:      goodbyeMsg,
+      agentUid:  currentUser.uid,
+      agentName: userRec?.name || currentUser.email.split('@')[0],
+      timestamp: firebase.database.ServerValue.TIMESTAMP,
+      isGoodbye: true
+    });
+
+    // 2. Mark conversation as ended + request CSAT
+    await db.ref(`businesses/${workspaceUid}/chats/${chatId}`).update({
+      status:         'ended',
+      endedAt:        firebase.database.ServerValue.TIMESTAMP,
+      endedByUid:     currentUser.uid,
+      endedByName:    userRec?.name || currentUser.email.split('@')[0],
+      csatRequested:  true,
+      updatedAt:      firebase.database.ServerValue.TIMESTAMP
+    });
+
+    // 3. Activity log
+    await db.ref(`businesses/${workspaceUid}/chats/${chatId}/activityLog`).push({
+      action:    `Conversation ended by ${userRec?.name||'Agent'} — CSAT requested`,
+      byUid:     currentUser.uid,
+      byName:    userRec?.name || 'Agent',
+      type:      'ended',
+      timestamp: Date.now()
+    });
+    await logActivity(workspaceUid, `${userRec?.name||'Agent'} ended a conversation and requested CSAT`, { type: 'ended', chatId });
+
+    // 4. Close modal
+    document.getElementById('end-csat-modal').style.display = 'none';
+    toast('Conversation ended. Customer will be asked to rate their experience.', 'success');
+  } catch (e) {
+    toast('Failed to end conversation.', 'error');
+  } finally {
+    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '✅ Yes, End & Send CSAT'; }
+  }
 }
 
 async function handleChatAction(action, chatId, chat) {
@@ -673,6 +878,12 @@ async function handleChatAction(action, chatId, chat) {
 
     case 'transfer': {
       const modal = document.getElementById('transfer-modal');
+      if (modal) modal.style.display = 'flex';
+      break;
+    }
+
+    case 'end_with_csat': {
+      const modal = document.getElementById('end-csat-modal');
       if (modal) modal.style.display = 'flex';
       break;
     }

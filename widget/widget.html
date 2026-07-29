@@ -113,6 +113,57 @@
     .bubble.user   { align-self: flex-end;   background: var(--primary); color: #fff; border-top-right-radius: 4px; }
     .bubble.system { align-self: center; background: #f3f4f6; color: var(--muted); font-size: 11px; padding: 6px 12px; }
     .bubble.agent  { align-self: flex-start; background: #ede9fe; color: var(--ink); border-top-left-radius: 4px; }
+    .bubble.ended  { align-self: center; background: #f0fdf4; color: #166534; font-size: 12px; padding: 8px 14px; border: 1px solid #bbf7d0; border-radius: 99px; }
+
+    /* CSAT rating box */
+    .csat-box {
+      margin: 0 16px 12px;
+      background: #f8f7ff;
+      border: 1.5px solid var(--primary-l);
+      border-radius: 14px;
+      padding: 16px;
+      animation: riseIn .3s ease both;
+    }
+    .csat-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--ink); }
+    .csat-sub   { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+    .csat-stars { display: flex; gap: 6px; justify-content: center; margin-bottom: 12px; }
+    .csat-star  {
+      font-size: 28px; cursor: pointer; color: #d1d5db;
+      transition: color .15s, transform .1s;
+      line-height: 1;
+    }
+    .csat-star.active, .csat-star:hover ~ .csat-star { }
+    .csat-star.selected, .csat-stars:hover .csat-star { color: #f59e0b; }
+    .csat-stars .csat-star:hover ~ .csat-star { color: #d1d5db; }
+    .csat-star:hover { transform: scale(1.2); }
+    .csat-comment {
+      width: 100%; border: 1.5px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; font-size: 12px; color: var(--ink);
+      background: #fff; outline: none; resize: none; font-family: inherit;
+      margin-bottom: 10px; display: none;
+    }
+    .csat-comment:focus { border-color: var(--primary-l); }
+    .csat-submit {
+      width: 100%; padding: 9px; background: var(--primary); color: #fff;
+      border-radius: 8px; font-size: 12px; font-weight: 700;
+      display: none; transition: opacity .15s;
+    }
+    .csat-submit:hover { opacity: .9; }
+    .csat-thanks {
+      text-align: center; font-size: 13px; font-weight: 600;
+      color: #166534; display: none;
+    }
+
+    /* Ended notice (replaces input) */
+    .ended-notice {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: #f0fdf4;
+      text-align: center;
+      font-size: 11px;
+      color: #166534;
+      flex-shrink: 0;
+    }
 
     /* Typing indicator */
     .typing {
@@ -314,12 +365,6 @@
 
     /* ── Widget state ─────────────────────────────────────────── */
     var state = {
-      /*
-       * view:
-       *   'launcher' — only the floating button is visible (widget closed)
-       *   'home'     — home screen shown when widget opens with no prior chat
-       *   'chat'     — active chat panel
-       */
       view:              'launcher',
       fullscreen:        false,
       loading:           true,
@@ -336,13 +381,17 @@
       faqsReady:         false,
       chatListening:     false,
       agentMsgKeys:      {},
-      historyPending:    false
+      historyPending:    false,
+      /* CSAT state */
+      conversationEnded: false,
+      csatSubmitted:     false,
+      csatScore:         0
     };
 
     /* ── Persistent visitor ID + chat ID + lead-captured flag ── */
     var VID_KEY  = 'drx_vid_'  + businessId;
     var CID_KEY  = 'drx_cid_'  + businessId;
-    var LEAD_KEY = 'drx_lead_' + businessId;   /* set only after submitLead */
+    var LEAD_KEY = 'drx_lead_' + businessId;
 
     state.visitorId = localStorage.getItem(VID_KEY) || null;
     if (!state.visitorId) {
@@ -350,8 +399,6 @@
       localStorage.setItem(VID_KEY, state.visitorId);
     }
 
-    /* Restore lead-captured flag so we never ask for details twice,
-       even across page refreshes. */
     if (localStorage.getItem(LEAD_KEY) === '1') {
       state.leadCaptured = true;
     }
@@ -424,72 +471,68 @@
 
     /* ── Restore a previous chat from Firebase ────────────────── */
     function restoreChat(chatId, done) {
-      db.ref('businesses/' + businessId + '/chats/' + chatId + '/messages')
-        .once('value', function (snap) {
-          if (!snap.exists()) {
-            localStorage.removeItem(CID_KEY);
-            state.chatId = null;
-            done();
-            return;
-          }
-          var msgs = [];
-          snap.forEach(function (child) {
-            var msg = child.val();
-            if (!msg || !msg.text) return;
-            msgs.push({ role: msg.role || 'bot', text: msg.text, id: ++state.msgCounter });
-            if (msg.role === 'agent') state.agentMsgKeys[child.key] = true;
-          });
-          state.messages = msgs;
-          /* leadCaptured is driven by the LEAD_KEY localStorage flag (set
-             only when the visitor actually submits the lead form).  We do
-             NOT override it here so we never falsely mark someone as having
-             submitted when they only had a FAQ-only chat. */
-          startListeningForAgentMessages();
+      /* Also check chat status to restore ended state */
+      db.ref('businesses/' + businessId + '/chats/' + chatId).once('value', function(chatSnap) {
+        if (!chatSnap.exists()) {
+          localStorage.removeItem(CID_KEY);
+          state.chatId = null;
           done();
-        }, function () { done(); });
+          return;
+        }
+        var chatData = chatSnap.val() || {};
+        if (chatData.status === 'ended') {
+          state.conversationEnded = true;
+          /* Check if CSAT already submitted */
+          if (chatData.csatScore) state.csatSubmitted = true;
+        }
+
+        var msgsSnap = chatSnap.child('messages');
+        var msgs = [];
+        msgsSnap.forEach(function(child) {
+          var msg = child.val();
+          if (!msg || !msg.text) return;
+          msgs.push({ role: msg.role || 'bot', text: msg.text, id: ++state.msgCounter });
+          if (msg.role === 'agent') state.agentMsgKeys[child.key] = true;
+        });
+        state.messages = msgs;
+        startListeningForAgentMessages();
+        startListeningForChatStatus();
+        done();
+      }, function() { done(); });
     }
 
     /* ── Clear conversation ───────────────────────────────────── */
     function clearConversation() {
       localStorage.removeItem(CID_KEY);
-      localStorage.removeItem(LEAD_KEY);   /* visitor can be re-asked on a fresh chat */
+      localStorage.removeItem(LEAD_KEY);
       if (state.chatId) {
         try { db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages').off(); } catch (e) {}
+        try { db.ref('businesses/' + businessId + '/chats/' + state.chatId).off(); } catch (e) {}
       }
-      state.chatId        = null;
-      state.chatListening = false;
-      state.messages      = [];
-      state.agentMsgKeys  = {};
-      state.showLeadForm  = false;
-      state.leadCaptured  = false;
-      state.msgCounter    = 0;
-      state.view          = 'home';  // go back to home after clearing
+      state.chatId            = null;
+      state.chatListening     = false;
+      state.messages          = [];
+      state.agentMsgKeys      = {};
+      state.showLeadForm      = false;
+      state.leadCaptured      = false;
+      state.msgCounter        = 0;
+      state.conversationEnded = false;
+      state.csatSubmitted     = false;
+      state.csatScore         = 0;
+      state.view              = 'home';
       render();
     }
 
     /* ════════════════════════════════════════════════════════════
        RENDER ENGINE
-       ════════════════════════════════════════════════════════════
-
-       render() is the top-level dispatcher.  It decides WHAT to
-       show and HOW to show it:
-
-         • launcher  → full innerHTML swap (just a button)
-         • home      → full innerHTML swap (home screen)
-         • chat      → ONLY on first open OR after a view switch.
-                       For every subsequent message update it calls
-                       patchPanel() which updates only the dynamic
-                       inner regions — no full teardown, no blink.
-    */
+    ════════════════════════════════════════════════════════════ */
     var root = document.getElementById('app');
 
     function render() {
-      /* Always apply current theme colour */
       var c = state.profile.themeColor || '#7c3aed';
       document.documentElement.style.setProperty('--primary',   c);
       document.documentElement.style.setProperty('--primary-l', lighten(c));
 
-      /* ── Launcher (widget closed) ─── */
       if (state.view === 'launcher') {
         root.innerHTML = launcherHtml();
         document.getElementById('btn-launcher').onclick = openWidget;
@@ -499,68 +542,61 @@
 
       notifyResize(true);
 
-      /* ── Home screen ──────────────── */
       if (state.view === 'home') {
         root.innerHTML = homeHtml();
         wireHome();
         return;
       }
 
-      /* ── Chat panel ───────────────── */
+      /* Chat panel */
       var existingPanel = document.getElementById('drx-panel');
       if (!existingPanel) {
-        /* First time showing chat panel — full build */
         root.innerHTML = chatPanelHtml();
         wirePanel();
         scrollMessages();
       } else {
-        /* Panel already in DOM — patch only the dynamic sections.
-           This is the no-blink path: the panel structure stays intact,
-           only #msg-area, #chips-area, #input-area, and #new-chat-span
-           are touched.  The input element is NOT replaced on a normal
-           message send, so the user's focus and cursor position survive. */
         patchPanel();
         scrollMessages();
       }
     }
 
-    /* ── Patch dynamic sections of an existing panel (NO BLINK) ─ */
+    /* ── Patch dynamic sections of an existing panel ─────────── */
     function patchPanel() {
-      /* 1. Messages */
       var msgArea = document.getElementById('msg-area');
       if (msgArea) msgArea.innerHTML = messagesInnerHtml();
 
-      /* 2. Quick-reply chips */
       var chipsArea = document.getElementById('chips-area');
       if (chipsArea) chipsArea.innerHTML = chipsInnerHtml();
 
-      /* 3. Input area — only rebuild if lead-form visibility changed */
       var inputArea = document.getElementById('input-area');
       if (inputArea) {
         var needLeadForm = state.showLeadForm && !state.leadCaptured;
         var hasLeadForm  = !!document.getElementById('lead-form');
-        if (needLeadForm !== hasLeadForm) {
+        var wasEnded     = !!document.getElementById('ended-notice');
+        var nowEnded     = state.conversationEnded;
+        if (needLeadForm !== hasLeadForm || wasEnded !== nowEnded) {
           inputArea.innerHTML = inputInnerHtml();
           wireInputArea();
         }
       }
 
-      /* 4. Re-wire chips (they are new DOM nodes) */
+      /* CSAT box */
+      var csatArea = document.getElementById('csat-area');
+      if (csatArea) csatArea.innerHTML = csatInnerHtml();
+      wireCsat();
+
       wireChips();
 
-      /* 5. "New conversation" button visibility */
       var newChatSpan = document.getElementById('new-chat-span');
       if (newChatSpan) {
         newChatSpan.style.display = state.messages.length ? '' : 'none';
         wireNewChatBtn();
       }
 
-      /* 6. Fullscreen button icon */
       var fsBtn = document.getElementById('btn-fullscreen');
       if (fsBtn) fsBtn.innerHTML = state.fullscreen ? '&#x292E;' : '&#x2922;';
     }
 
-    /* ── Scroll messages to bottom ───────────────────────────── */
     function scrollMessages() {
       var msgArea = document.getElementById('msg-area');
       if (msgArea) msgArea.scrollTop = msgArea.scrollHeight;
@@ -570,19 +606,16 @@
        HTML BUILDERS
     ════════════════════════════════════════════════════════════ */
 
-    /* ── Launcher button ─────────────────────────────────────── */
     function launcherHtml() {
       return '<button id="btn-launcher" class="launcher" aria-label="Open support chat">💬</button>';
     }
 
-    /* ── Home screen HTML ────────────────────────────────────── */
     function homeHtml() {
       var bizName = esc(state.profile.chatTitle || state.profile.name || 'Support');
       var logoEl  = state.profile.logoUrl
         ? '<div class="home-logo-wrap"><img src="' + esc(state.profile.logoUrl) + '" alt="logo"></div>'
         : '<div class="home-logo-wrap">' + esc((state.profile.name || 'S').slice(0, 2).toUpperCase()) + '</div>';
 
-      /* FAQ topic rows */
       var topics = state.faqs.length > 0
         ? state.faqs.slice(0, 4).map(function (f) { return f.question; })
         : ['How can you help me?', 'Pricing & plans', 'Technical support', 'Report an issue'];
@@ -619,7 +652,6 @@
       );
     }
 
-    /* ── Chat panel HTML (full structure — built once per open) ── */
     function chatPanelHtml() {
       if (state.permissionError) return permissionErrorHtml();
 
@@ -633,9 +665,8 @@
           '<div class="panel-header">' + logoEl +
             '<div class="header-text">' +
               '<div class="header-title">' + title + '</div>' +
-              '<div class="header-status">✅ Online · Usually replies instantly</div>' +
+              '<div class="header-status">' + (state.conversationEnded ? '🏁 Conversation Ended' : '✅ Online · Usually replies instantly') + '</div>' +
             '</div>' +
-            /* Fullscreen toggle button */
             '<button id="btn-fullscreen" class="header-btn" title="' +
               (state.fullscreen ? 'Exit fullscreen' : 'Fullscreen') + '">' +
               (state.fullscreen ? '&#x292E;' : '&#x2922;') +
@@ -644,6 +675,7 @@
           '</div>' +
           '<div class="messages" id="msg-area">' + messagesInnerHtml() + '</div>' +
           '<div id="chips-area">' + chipsInnerHtml() + '</div>' +
+          '<div id="csat-area">' + csatInnerHtml() + '</div>' +
           '<div id="input-area">' + inputInnerHtml() + '</div>' +
           '<div class="panel-footer">' +
             'Powered by <a href="https://daviddchucks-hash.github.io/drexorasupport/" target="_blank">Drexora Support</a>' +
@@ -656,7 +688,6 @@
       );
     }
 
-    /* ── Permission error panel ──────────────────────────────── */
     function permissionErrorHtml() {
       return (
         '<div class="panel" id="drx-panel">' +
@@ -676,27 +707,33 @@
               'Go to your <strong>Firebase Console → Realtime Database → Rules</strong> and update them.' +
             '</div>' +
           '</div>' +
+          '<div id="csat-area"></div>' +
+          '<div id="input-area"></div>' +
           '<div class="panel-footer">Powered by <a href="https://daviddchucks-hash.github.io/drexorasupport/" target="_blank">Drexora Support</a></div>' +
         '</div>' +
         '<button id="btn-launcher" class="launcher" style="margin-top:10px" aria-label="Close">×</button>'
       );
     }
 
-    /* ── Inner HTML builders (used both in full build + patch) ── */
+    /* ── Inner HTML builders ─────────────────────────────────── */
 
     function messagesInnerHtml() {
       var welcomeHtml = '<div class="bubble bot">' + esc(state.profile.welcomeMessage) + '</div>';
       if (state.loading) {
-        return welcomeHtml + '<div class="typing"><span></span><span></span><span></span></div>';
+        return welcomeHtml;
       }
-      return welcomeHtml + state.messages.map(function (m) {
+      var html = welcomeHtml + state.messages.map(function (m) {
         if (m.role === 'agent') return '<div class="bubble agent">' + esc(m.text) + '</div>';
         return '<div class="bubble ' + m.role + '">' + esc(m.text) + '</div>';
       }).join('');
+      if (state.conversationEnded && !state.csatSubmitted) {
+        /* show a subtle system bubble that CSAT is requested */
+      }
+      return html;
     }
 
     function chipsInnerHtml() {
-      if (state.messages.length || state.loading) return '';
+      if (state.messages.length || state.loading || state.conversationEnded) return '';
       var chipItems = state.faqs.length > 0
         ? state.faqs.slice(0, 5).map(function (f) { return f.question; })
         : ['How can you help me?', 'What are your prices?', 'I have an issue'];
@@ -707,7 +744,45 @@
       '</div>';
     }
 
+    /* ── CSAT box HTML ─────────────────────────────────────────── */
+    function csatInnerHtml() {
+      if (!state.conversationEnded) return '';
+      if (state.csatSubmitted) {
+        return '<div class="csat-box" style="text-align:center">' +
+          '<div style="font-size:24px;margin-bottom:6px">🙏</div>' +
+          '<div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:4px">Thank you for your feedback!</div>' +
+          '<div style="font-size:11px;color:#6b7280">Your rating has been submitted. We appreciate you taking the time.</div>' +
+        '</div>';
+      }
+      var starsHtml = '';
+      for (var i = 1; i <= 5; i++) {
+        starsHtml += '<span class="csat-star" data-score="' + i + '" style="color:' + (i <= state.csatScore ? '#f59e0b' : '#d1d5db') + '">★</span>';
+      }
+      return (
+        '<div class="csat-box" id="csat-box">' +
+          '<div class="csat-title">How was your experience?</div>' +
+          '<div class="csat-sub">Rate your conversation with our team</div>' +
+          '<div class="csat-stars" id="csat-stars">' + starsHtml + '</div>' +
+          '<textarea class="csat-comment" id="csat-comment" rows="2" placeholder="Leave a comment (optional)…"' +
+            ' style="' + (state.csatScore > 0 ? 'display:block' : 'display:none') + '"></textarea>' +
+          '<button class="csat-submit" id="csat-submit"' +
+            ' style="' + (state.csatScore > 0 ? 'display:block' : 'display:none') + '">Submit Rating</button>' +
+          '<div class="csat-thanks" id="csat-thanks"></div>' +
+        '</div>'
+      );
+    }
+
     function inputInnerHtml() {
+      /* Conversation ended — show notice, no input */
+      if (state.conversationEnded) {
+        return (
+          '<div class="ended-notice" id="ended-notice">' +
+            '🏁 This conversation has ended. ' +
+            '<button id="btn-new-chat-ended" class="footer-new-chat" style="font-size:11px">Start a new conversation →</button>' +
+          '</div>'
+        );
+      }
+
       if (state.showLeadForm && !state.leadCaptured) {
         return (
           '<form id="lead-form" class="lead-form">' +
@@ -748,13 +823,11 @@
         }, 80);
       };
 
-      /* FAQ chips on home → start conversation with that question */
       document.querySelectorAll('.home-faq-chip[data-chip]').forEach(function (btn) {
         btn.onclick = function () {
           var question = btn.getAttribute('data-chip');
           state.view = 'chat';
           render();
-          /* Small delay so the panel is in DOM before sendMessage modifies it */
           setTimeout(function () { sendMessage(question); }, 60);
         };
       });
@@ -773,6 +846,7 @@
       wireInputArea();
       wireChips();
       wireNewChatBtn();
+      wireCsat();
     }
 
     function wireInputArea() {
@@ -786,6 +860,14 @@
       }
       var leadForm = document.getElementById('lead-form');
       if (leadForm) leadForm.onsubmit = submitLead;
+
+      /* New conversation button inside ended notice */
+      var newChatEnded = document.getElementById('btn-new-chat-ended');
+      if (newChatEnded) newChatEnded.onclick = function() {
+        if (confirm('Start a new conversation? Your current chat history will be cleared.')) {
+          clearConversation();
+        }
+      };
     }
 
     function wireChips() {
@@ -803,18 +885,98 @@
       };
     }
 
+    /* ── Wire CSAT interactions ──────────────────────────────── */
+    function wireCsat() {
+      var stars = document.querySelectorAll('.csat-star');
+      if (!stars.length) return;
+
+      stars.forEach(function(star) {
+        var score = parseInt(star.getAttribute('data-score'), 10);
+
+        star.onmouseenter = function() {
+          stars.forEach(function(s, i) {
+            s.style.color = (i < score) ? '#f59e0b' : '#d1d5db';
+          });
+        };
+        star.onmouseleave = function() {
+          stars.forEach(function(s, i) {
+            s.style.color = (i < state.csatScore) ? '#f59e0b' : '#d1d5db';
+          });
+        };
+        star.onclick = function() {
+          state.csatScore = score;
+          /* Show comment and submit button */
+          var comment = document.getElementById('csat-comment');
+          var submit  = document.getElementById('csat-submit');
+          if (comment) comment.style.display = 'block';
+          if (submit)  submit.style.display  = 'block';
+          /* Update star colours */
+          stars.forEach(function(s, i) {
+            s.style.color = (i < score) ? '#f59e0b' : '#d1d5db';
+          });
+        };
+      });
+
+      var submitBtn = document.getElementById('csat-submit');
+      if (submitBtn) {
+        submitBtn.onclick = submitCsat;
+      }
+    }
+
+    /* ── Submit CSAT rating ──────────────────────────────────── */
+    function submitCsat() {
+      if (!state.csatScore || !state.chatId) return;
+      var comment = (document.getElementById('csat-comment')?.value || '').trim();
+      var submitBtn = document.getElementById('csat-submit');
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…'; }
+
+      try {
+        /* Save to csatReports collection */
+        db.ref('businesses/' + businessId + '/csatReports/' + state.chatId).set({
+          chatId:        state.chatId,
+          score:         state.csatScore,
+          comment:       comment,
+          visitorId:     state.visitorId,
+          customerName:  '',   /* populated below if available */
+          customerEmail: '',
+          agentName:     '',
+          createdAt:     firebase.database.ServerValue.TIMESTAMP
+        });
+
+        /* Also store score on the chat document so agents see it */
+        db.ref('businesses/' + businessId + '/chats/' + state.chatId).update({
+          csatScore:   state.csatScore,
+          csatComment: comment,
+          csatAt:      firebase.database.ServerValue.TIMESTAMP
+        });
+
+        /* Enrich with customer details if we have them */
+        db.ref('businesses/' + businessId + '/chats/' + state.chatId).once('value', function(snap) {
+          var d = snap.val() || {};
+          db.ref('businesses/' + businessId + '/csatReports/' + state.chatId).update({
+            customerName:  d.customerName  || '',
+            customerEmail: d.customerEmail || '',
+            agentName:     d.endedByName   || ''
+          });
+        });
+      } catch(e) { /* silent */ }
+
+      state.csatSubmitted = true;
+
+      /* Re-render CSAT area with thanks */
+      var csatArea = document.getElementById('csat-area');
+      if (csatArea) {
+        csatArea.innerHTML = csatInnerHtml();
+      }
+    }
+
     /* ════════════════════════════════════════════════════════════
        FAQ MATCHING
-       Matches user input against stored FAQ questions/answers.
-       Works regardless of whether a lead has been captured — FAQ
-       answers are always shown when a match is found.
     ════════════════════════════════════════════════════════════ */
     function findFaqMatch(text) {
       if (!state.faqs.length) return null;
 
       var lc = text.toLowerCase().trim();
-
-      /* Trivially short / greeting-only messages — skip FAQ matching */
       if (lc.length < 2) return null;
 
       var STOP = { 'the':1,'and':1,'for':1,'are':1,'but':1,'not':1,'you':1,'all':1,'can':1,'her':1,'was':1,'one':1,'our':1,'out':1,'had':1,'has':1,'his':1,'how':1,'its':1,'may':1,'new':1,'now':1,'old':1,'see':1,'two':1,'way':1,'who':1,'did':1,'get':1,'use':1,'him':1,'let':1,'put':1,'too':1,'why':1,'got':1,'what':1,'this':1,'that':1,'with':1,'from':1,'they':1,'have':1,'been':1,'will':1,'when':1,'your':1,'just':1,'also':1,'more':1,'some':1,'then':1,'than':1,'into':1,'over':1,'like':1,'does':1,'here':1,'tell':1,'give':1,'want':1 };
@@ -826,8 +988,6 @@
       }
 
       var userWords = keywords(text);
-      /* If all words were filtered out, try with the full lowercased string
-         as a single keyword (handles single-word queries like "pricing") */
       if (!userWords.length) {
         var bare = lc.replace(/[^a-z0-9]/g, '');
         if (bare.length >= 2) userWords = [bare];
@@ -842,13 +1002,8 @@
         var qWords = keywords(faq.question || '');
         var score  = 0;
 
-        /* Exact question substring match — high reward */
         if (qLc.includes(lc) || lc.includes(qLc)) score += 8;
-
-        /* Keyword overlap: FAQ question words found in user text */
         qWords.forEach(function (w) { if (lc.includes(w)) score += 2; });
-
-        /* Keyword overlap: user words found in FAQ question or answer */
         userWords.forEach(function (w) {
           if (qLc.includes(w)) score += 2;
           if (aLc.includes(w)) score += 1;
@@ -857,59 +1012,50 @@
         if (score > 0 && score > bestScore) { bestScore = score; best = faq; }
       }
 
-      /* Threshold = 2 so even a single meaningful keyword triggers a match */
       return bestScore >= 2 ? best : null;
     }
 
     /* ════════════════════════════════════════════════════════════
        SEND MESSAGE
-       Uses render() which internally calls patchPanel() when the
-       chat panel is already in the DOM — no full rebuild, no blink.
+       AI responses are immediate — no typing delay.
     ════════════════════════════════════════════════════════════ */
     function sendMessage(text) {
       text = (text || '').trim();
       if (!text) return;
 
-      /* Clear input without rebuilding the panel */
+      /* Block sending if conversation has ended */
+      if (state.conversationEnded) return;
+
       var inputEl = document.getElementById('chat-input');
       if (inputEl) inputEl.value = '';
 
       state.messages.push({ role: 'user', text: text, id: ++state.msgCounter });
-      state.messages.push({ role: 'bot',  text: '…', id: ++state.msgCounter, typing: true });
-      render(); /* → patchPanel() → only #msg-area rebuilt, no blink */
+      render(); /* show user message immediately */
 
-      setTimeout(function () {
-        state.messages = state.messages.filter(function (m) { return !m.typing; });
+      /* Process FAQ / lead logic immediately — no typing delay */
+      var match = findFaqMatch(text);
+      if (match) {
+        state.messages.push({ role: 'bot', text: match.answer, id: ++state.msgCounter });
+        saveChat(text, match.answer);
+        state.showLeadForm = false;
+      } else if (!state.leadCaptured) {
+        state.messages.push({
+          role: 'bot',
+          text: "I couldn't find a direct answer to that. To connect you with a live agent, please share your name, email and phone number below.",
+          id: ++state.msgCounter
+        });
+        state.showLeadForm = true;
+        saveChat(text, "Couldn't find a FAQ match — requesting lead details.");
+      } else {
+        state.messages.push({
+          role: 'bot',
+          text: "Got your message! A member of our team will follow up with you shortly.",
+          id: ++state.msgCounter
+        });
+        saveChat(text, "Post-lead follow-up message.");
+      }
 
-        /* ── 1. Always try FAQ first, regardless of leadCaptured ── */
-        var match = findFaqMatch(text);
-        if (match) {
-          state.messages.push({ role: 'bot', text: match.answer, id: ++state.msgCounter });
-          saveChat(text, match.answer);
-          state.showLeadForm = false;
-
-        /* ── 2. No FAQ match + haven't collected lead yet → ask ── */
-        } else if (!state.leadCaptured) {
-          state.messages.push({
-            role: 'bot',
-            text: "I couldn't find a direct answer to that. To connect you with a live agent, please share your name, email and phone number below.",
-            id: ++state.msgCounter
-          });
-          state.showLeadForm = true;
-          saveChat(text, "Couldn't find a FAQ match — requesting lead details.");
-
-        /* ── 3. No FAQ match + lead already captured → acknowledge ── */
-        } else {
-          state.messages.push({
-            role: 'bot',
-            text: "Got your message! A member of our team will follow up with you shortly.",
-            id: ++state.msgCounter
-          });
-          saveChat(text, "Post-lead follow-up message.");
-        }
-
-        render(); /* → patchPanel() again — only dynamic sections updated */
-      }, 900);
+      render();
     }
 
     /* ── Save chat to Realtime DB ─────────────────────────────── */
@@ -930,6 +1076,7 @@
             customerEmail: ''
           });
           startListeningForAgentMessages();
+          startListeningForChatStatus();
         }
         var msgsRef = db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages');
         msgsRef.push({ role: 'user', text: userMsg, timestamp: firebase.database.ServerValue.TIMESTAMP });
@@ -951,7 +1098,31 @@
           state.agentMsgKeys[key] = true;
 
           state.messages.push({ role: 'agent', text: msg.text || '', id: ++state.msgCounter });
-          if (state.view === 'chat') render(); /* patchPanel if panel exists */
+          if (state.view === 'chat') render();
+        });
+    }
+
+    /* ── Listen for chat status changes (ended, etc.) ─────────── */
+    function startListeningForChatStatus() {
+      if (!state.chatId) return;
+
+      db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/status')
+        .on('value', function(snap) {
+          var status = snap.val();
+          if (status === 'ended' && !state.conversationEnded) {
+            state.conversationEnded = true;
+            if (state.view === 'chat') render();
+          }
+        });
+
+      /* Also watch for CSAT score being set (e.g. by another widget session) */
+      db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/csatScore')
+        .on('value', function(snap) {
+          if (snap.val() && !state.csatSubmitted) {
+            state.csatSubmitted = true;
+            state.csatScore     = snap.val();
+            if (state.view === 'chat') render();
+          }
         });
     }
 
@@ -984,7 +1155,7 @@
 
       state.showLeadForm = false;
       state.leadCaptured = true;
-      localStorage.setItem(LEAD_KEY, '1');   /* persist across page refreshes */
+      localStorage.setItem(LEAD_KEY, '1');
 
       if (state.chatId) {
         try {
@@ -1014,16 +1185,13 @@
 
     /* ── Open / Close ─────────────────────────────────────────── */
     function openWidget() {
-      /* If there are existing messages or we're still restoring history,
-         go straight to the chat panel.  Otherwise show the home screen. */
-      state.view = (state.messages.length > 0 || state.historyPending || state.loading)
+      state.view = (state.messages.length > 0 || state.historyPending || state.loading || state.conversationEnded)
         ? 'chat'
         : 'home';
       render();
     }
 
     function closeWidget() {
-      /* Exit fullscreen first so the iframe shrinks back properly */
       if (state.fullscreen) {
         state.fullscreen = false;
         notifyFullscreen(false);
@@ -1045,7 +1213,6 @@
         root.classList.remove('is-fullscreen');
       }
 
-      /* Update button icon without full re-render */
       var fsBtn = document.getElementById('btn-fullscreen');
       if (fsBtn) {
         fsBtn.innerHTML = state.fullscreen ? '&#x292E;' : '&#x2922;';

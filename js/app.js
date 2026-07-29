@@ -428,6 +428,42 @@ function _injectInboxNavLink() {
       if (currentPage === 'workspace.html') wsLink.classList.add('active');
     }
   }
+
+  // ── Inject Canned Responses link (after Workspace) ──────────
+  if (!document.querySelector('.nav-item[href="canned-responses.html"]')) {
+    const wsLink = document.querySelector('.nav-item[href="workspace.html"]');
+    if (wsLink) {
+      const cannedLink = document.createElement('a');
+      cannedLink.className = 'nav-item';
+      cannedLink.href = 'canned-responses.html';
+      cannedLink.innerHTML = `
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          <line x1="8" y1="9" x2="16" y2="9"/>
+          <line x1="8" y1="13" x2="14" y2="13"/>
+        </svg>
+        Canned Responses`;
+      wsLink.insertAdjacentElement('afterend', cannedLink);
+      if (currentPage === 'canned-responses.html') cannedLink.classList.add('active');
+    }
+  }
+
+  // ── Inject CSAT Reports link (after Canned Responses) ───────
+  if (!document.querySelector('.nav-item[href="csat-reports.html"]')) {
+    const cannedLink = document.querySelector('.nav-item[href="canned-responses.html"]');
+    if (cannedLink) {
+      const csatLink = document.createElement('a');
+      csatLink.className = 'nav-item';
+      csatLink.href = 'csat-reports.html';
+      csatLink.innerHTML = `
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        CSAT Reports`;
+      cannedLink.insertAdjacentElement('afterend', csatLink);
+      if (currentPage === 'csat-reports.html') csatLink.classList.add('active');
+    }
+  }
 }
 
 async function _updatePresence(user) {
