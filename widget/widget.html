@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drexora Support</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: transparent; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      color: #1a1a2e;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; cursor: pointer; border: none; }
+
+    /* ── CSS variables (overridden by JS from business theme) ── */
+    :root {
+      --primary:   #7c3aed;
+      --primary-l: #a78bfa;
+      --ink:       #1a1a2e;
+      --paper:     #f8f7ff;
+      --muted:     #6b7280;
+      --border:    #e5e7eb;
+    }
+
+    /* ── Widget root ─────────────────────────────────────────── */
+    #app {
+      position: fixed;
+      right: 0; bottom: 0;
+      width: min(370px, 100vw);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    /* ── Launcher button (BIGGER: 68×68) ────────────────────── */
+    .launcher {
+      display: flex; align-items: center; justify-content: center;
+      width: 68px; height: 68px;
+      margin-bottom: 12px;
+      border-radius: 20px;
+      background: var(--primary);
+      color: #fff; font-size: 26px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.28);
+      transition: transform .2s ease, box-shadow .2s ease;
+      flex-shrink: 0;
+    }
+    .launcher:hover  { transform: translateY(-2px) scale(1.04); box-shadow: 0 12px 36px rgba(0,0,0,.32); }
+    .launcher:active { transform: scale(.97); }
+
+    /* ── Chat panel ─────────────────────────────────────────── */
+    .panel {
+      width: 100%;
+      border-radius: 18px 18px 0 0;
+      background: var(--paper);
+      box-shadow: 0 -4px 32px rgba(0,0,0,.12), 0 20px 60px rgba(0,0,0,.25);
+      overflow: hidden;
+      animation: riseIn .28s cubic-bezier(.22,.68,0,1.2) both;
+      display: flex;
+      flex-direction: column;
+    }
+    @keyframes riseIn {
+      from { opacity: 0; transform: translateY(20px) scale(.97); }
+      to   { opacity: 1; transform: translateY(0)   scale(1); }
+    }
+
+    /* Panel header */
+    .panel-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 16px;
+      background: var(--primary); color: #fff;
+      flex-shrink: 0;
+    }
+    .logo-wrap {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: rgba(255,255,255,.2);
+      display: grid; place-items: center;
+      font-size: 18px; font-weight: 800; flex-shrink: 0; overflow: hidden;
+    }
+    .logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    .header-text { flex: 1; min-width: 0; }
+    .header-title  { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .header-status { font-size: 11px; opacity: .8; margin-top: 1px; }
+    /* Unified header icon button (close + fullscreen) */
+    .header-btn {
+      background: rgba(255,255,255,.15); border-radius: 8px; color: #fff;
+      width: 30px; height: 30px; display: grid; place-items: center;
+      font-size: 16px; transition: background .15s; flex-shrink: 0;
+      border: none; cursor: pointer; line-height: 1;
+    }
+    .header-btn:hover { background: rgba(255,255,255,.28); }
+
+    /* Messages area */
+    .messages {
+      max-height: 340px; overflow-y: auto;
+      padding: 16px; display: flex; flex-direction: column; gap: 10px;
+      scroll-behavior: smooth;
+      flex-shrink: 0;
+    }
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+
+    /* Bubbles */
+    .bubble {
+      max-width: 82%; padding: 10px 13px; border-radius: 14px;
+      font-size: 13px; line-height: 1.55;
+      animation: bubbleIn .2s ease both;
+    }
+    @keyframes bubbleIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .bubble.bot    { align-self: flex-start; background: #ede9fe; color: var(--ink); border-top-left-radius: 4px; }
+    .bubble.user   { align-self: flex-end;   background: var(--primary); color: #fff; border-top-right-radius: 4px; }
+    .bubble.system { align-self: center; background: #f3f4f6; color: var(--muted); font-size: 11px; padding: 6px 12px; }
+    .bubble.agent  { align-self: flex-start; background: #ede9fe; color: var(--ink); border-top-left-radius: 4px; }
+    .bubble.ended  { align-self: center; background: #f0fdf4; color: #166534; font-size: 12px; padding: 8px 14px; border: 1px solid #bbf7d0; border-radius: 99px; }
+
+    /* CSAT rating box */
+    .csat-box {
+      margin: 0 16px 12px;
+      background: #f8f7ff;
+      border: 1.5px solid var(--primary-l);
+      border-radius: 14px;
+      padding: 16px;
+      animation: riseIn .3s ease both;
+    }
+    .csat-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--ink); }
+    .csat-sub   { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+    .csat-stars { display: flex; gap: 6px; justify-content: center; margin-bottom: 12px; }
+    .csat-star  {
+      font-size: 28px; cursor: pointer; color: #d1d5db;
+      transition: color .15s, transform .1s;
+      line-height: 1;
+    }
+    .csat-star.active, .csat-star:hover ~ .csat-star { }
+    .csat-star.selected, .csat-stars:hover .csat-star { color: #f59e0b; }
+    .csat-stars .csat-star:hover ~ .csat-star { color: #d1d5db; }
+    .csat-star:hover { transform: scale(1.2); }
+    .csat-comment {
+      width: 100%; border: 1.5px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; font-size: 12px; color: var(--ink);
+      background: #fff; outline: none; resize: none; font-family: inherit;
+      margin-bottom: 10px; display: none;
+    }
+    .csat-comment:focus { border-color: var(--primary-l); }
+    .csat-submit {
+      width: 100%; padding: 9px; background: var(--primary); color: #fff;
+      border-radius: 8px; font-size: 12px; font-weight: 700;
+      display: none; transition: opacity .15s;
+    }
+    .csat-submit:hover { opacity: .9; }
+    .csat-thanks {
+      text-align: center; font-size: 13px; font-weight: 600;
+      color: #166534; display: none;
+    }
+
+    /* Ended notice (replaces input) */
+    .ended-notice {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: #f0fdf4;
+      text-align: center;
+      font-size: 11px;
+      color: #166534;
+      flex-shrink: 0;
+    }
+
+    /* Typing indicator */
+    .typing {
+      align-self: flex-start; display: flex; gap: 4px;
+      padding: 12px 14px; background: #ede9fe;
+      border-radius: 14px; border-top-left-radius: 4px;
+    }
+    .typing span {
+      width: 7px; height: 7px; background: var(--primary); border-radius: 50%;
+      animation: bounce .8s ease infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: .15s; }
+    .typing span:nth-child(3) { animation-delay: .30s; }
+    @keyframes bounce { 0%,100% { transform: translateY(0); opacity: .5; } 50% { transform: translateY(-5px); opacity: 1; } }
+
+    /* Quick-reply chips */
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
+    .chip {
+      padding: 8px 13px; border: 1.5px solid var(--primary-l);
+      border-radius: 99px; background: #fff; color: var(--primary);
+      font-size: 12px; font-weight: 600; transition: all .15s; white-space: nowrap;
+    }
+    .chip:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* Input row */
+    .input-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; border-top: 1px solid var(--border); background: #fff;
+      flex-shrink: 0;
+    }
+    .chat-input {
+      flex: 1; border: 1.5px solid var(--border); border-radius: 10px;
+      padding: 9px 12px; font-size: 13px; color: var(--ink);
+      outline: none; transition: border-color .15s; background: #fafafa;
+    }
+    .chat-input:focus { border-color: var(--primary-l); background: #fff; }
+    .chat-input::placeholder { color: #9ca3af; }
+    .send-btn {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--primary); color: #fff;
+      display: grid; place-items: center; flex-shrink: 0; font-size: 16px;
+      transition: opacity .15s;
+    }
+    .send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* Lead capture form */
+    .lead-form {
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 8px 16px 16px; animation: riseIn .2s ease both;
+    }
+    .lead-form-title { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .lead-input {
+      width: 100%; border: 1.5px solid var(--border); border-radius: 9px;
+      padding: 9px 12px; font-size: 13px; color: var(--ink);
+      background: #fafafa; outline: none; transition: border-color .15s;
+    }
+    .lead-input:focus { border-color: var(--primary-l); background: #fff; }
+    .lead-input::placeholder { color: #9ca3af; }
+    .lead-submit {
+      padding: 10px; background: var(--primary); color: #fff;
+      border-radius: 9px; font-size: 13px; font-weight: 700; transition: opacity .15s;
+    }
+    .lead-submit:hover { opacity: .9; }
+
+    /* Panel footer */
+    .panel-footer {
+      padding: 8px 14px; border-top: 1px solid var(--border);
+      text-align: center; font-size: 10px; color: var(--muted);
+      flex-shrink: 0;
+    }
+    .panel-footer a { color: var(--muted); text-decoration: none; }
+    .footer-new-chat {
+      background: none; border: none; padding: 0;
+      font-size: 10px; color: var(--muted);
+      cursor: pointer; text-decoration: underline; font-family: inherit;
+    }
+    .footer-new-chat:hover { color: var(--primary); }
+
+    /* ── Home screen ─────────────────────────────────────────── */
+    .home-screen {
+      width: 100%;
+      border-radius: 18px 18px 0 0;
+      background: var(--paper);
+      box-shadow: 0 -4px 32px rgba(0,0,0,.12), 0 20px 60px rgba(0,0,0,.25);
+      overflow: hidden;
+      animation: riseIn .28s cubic-bezier(.22,.68,0,1.2) both;
+    }
+    .home-hero {
+      padding: 22px 18px 22px;
+      background: var(--primary);
+      color: #fff;
+      position: relative;
+    }
+    .home-hero-top {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+    }
+    .home-logo-wrap {
+      width: 46px; height: 46px; border-radius: 13px;
+      background: rgba(255,255,255,.2);
+      display: grid; place-items: center;
+      font-size: 17px; font-weight: 800; flex-shrink: 0; overflow: hidden;
+    }
+    .home-logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    .home-biz-name  { font-size: 14px; font-weight: 800; }
+    .home-biz-status { font-size: 11px; opacity: .8; margin-top: 2px; }
+    .home-close-btn {
+      position: absolute; top: 13px; right: 14px;
+      background: rgba(255,255,255,.15); border-radius: 8px; color: #fff;
+      width: 30px; height: 30px; display: grid; place-items: center;
+      font-size: 18px; transition: background .15s; border: none; cursor: pointer;
+    }
+    .home-close-btn:hover { background: rgba(255,255,255,.28); }
+    .home-greeting {
+      font-size: 22px; font-weight: 800; line-height: 1.2; margin-bottom: 7px;
+    }
+    .home-tagline {
+      font-size: 13px; opacity: .88; line-height: 1.55;
+    }
+    .home-body {
+      padding: 16px 14px 18px;
+      max-height: 260px; overflow-y: auto;
+    }
+    .home-body::-webkit-scrollbar { width: 3px; }
+    .home-body::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+    .home-section-label {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .07em;
+      color: var(--muted); margin-bottom: 10px;
+    }
+    .home-faq-chip {
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%; padding: 11px 13px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px; background: #fff; color: var(--ink);
+      font-size: 12px; font-weight: 500; text-align: left;
+      margin-bottom: 8px; transition: border-color .15s, color .15s;
+      cursor: pointer;
+    }
+    .home-faq-chip:hover { border-color: var(--primary); color: var(--primary); }
+    .home-faq-chip .faq-chip-text { flex: 1; margin-right: 8px; }
+    .home-faq-chip .faq-arrow { opacity: .35; font-size: 16px; flex-shrink: 0; }
+    /* The "New Conversation" CTA button */
+    .home-start-btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 13px 20px; margin-top: 8px;
+      background: var(--primary); color: #fff;
+      border-radius: 12px; font-size: 13px; font-weight: 700;
+      box-shadow: 0 4px 18px rgba(0,0,0,.18);
+      transition: opacity .15s, transform .15s;
+      border: none; cursor: pointer;
+    }
+    .home-start-btn:hover  { opacity: .92; transform: translateY(-1px); }
+    .home-start-btn:active { transform: scale(.98); }
+
+    /* ── Fullscreen mode ─────────────────────────────────────── */
+    #app.is-fullscreen {
+      width: 100vw !important;
+      left: 0 !important;
+    }
+    /* In fullscreen hide the collapse-launcher below the panel */
+    #app.is-fullscreen > button.launcher {
+      display: none !important;
+    }
+    #app.is-fullscreen .panel {
+      border-radius: 0 !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+    }
+    #app.is-fullscreen .messages {
+      max-height: none !important;
+      flex: 1 !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <script>
+  (function () {
+    'use strict';
+
+    /* ── Firebase config ──────────────────────────────────────── */
+    var FIREBASE_CONFIG = {
+      apiKey:            'AIzaSyA1wX_0tastbk_hWfI0_cvuV9ZzoIKitL4',
+      authDomain:        'drexorasupport.firebaseapp.com',
+      projectId:         'drexorasupport',
+      storageBucket:     'drexorasupport.firebasestorage.app',
+      messagingSenderId: '669148105903',
+      appId:             '1:669148105903:web:69641657318107bf1a185a',
+      databaseURL:       'https://drexorasupport-default-rtdb.firebaseio.com'
+    };
+
+    /* ── Parse business ID ────────────────────────────────────── */
+    var businessId = new URLSearchParams(window.location.search).get('business');
+    if (!businessId) { console.warn('[Drexora] No business ID.'); return; }
+
+    /* ── Widget state ─────────────────────────────────────────── */
+    var state = {
+      view:              'launcher',
+      fullscreen:        false,
+      loading:           true,
+      permissionError:   false,
+      profile:           { name: 'Support', welcomeMessage: 'Hi! How can we help you today?', themeColor: '#7c3aed', chatTitle: '', logoUrl: '' },
+      faqs:              [],
+      messages:          [],
+      showLeadForm:      false,
+      leadCaptured:      false,
+      visitorId:         null,
+      chatId:            null,
+      msgCounter:        0,
+      profileReady:      false,
+      faqsReady:         false,
+      chatListening:     false,
+      agentMsgKeys:      {},
+      historyPending:    false,
+      /* CSAT state */
+      conversationEnded: false,
+      csatSubmitted:     false,
+      csatScore:         0
+    };
+
+    /* ── Persistent visitor ID + chat ID + lead-captured flag ── */
+    var VID_KEY  = 'drx_vid_'  + businessId;
+    var CID_KEY  = 'drx_cid_'  + businessId;
+    var LEAD_KEY = 'drx_lead_' + businessId;
+
+    state.visitorId = localStorage.getItem(VID_KEY) || null;
+    if (!state.visitorId) {
+      state.visitorId = 'v_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      localStorage.setItem(VID_KEY, state.visitorId);
+    }
+
+    if (localStorage.getItem(LEAD_KEY) === '1') {
+      state.leadCaptured = true;
+    }
+
+    var savedChatId = localStorage.getItem(CID_KEY) || null;
+    if (savedChatId) {
+      state.chatId         = savedChatId;
+      state.historyPending = true;
+    }
+
+    /* ── Init Firebase ────────────────────────────────────────── */
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    var db = firebase.database();
+
+    /* ── Load business profile ────────────────────────────────── */
+    db.ref('businesses/' + businessId + '/profile').on('value', function (snap) {
+      if (snap.exists()) {
+        var p = snap.val();
+        state.profile.name           = p.name           || state.profile.name;
+        state.profile.welcomeMessage = p.welcomeMessage || state.profile.welcomeMessage;
+        state.profile.themeColor     = p.themeColor     || state.profile.themeColor;
+        state.profile.chatTitle      = p.chatTitle      || '';
+        state.profile.logoUrl        = p.logoUrl        || '';
+      }
+      if (!state.profileReady) {
+        state.profileReady = true;
+        tryInitialRender();
+      } else {
+        render();
+      }
+    }, function (err) {
+      if (err.code === 'PERMISSION_DENIED') state.permissionError = true;
+      if (!state.profileReady) { state.profileReady = true; tryInitialRender(); }
+    });
+
+    /* ── Real-time FAQ listener ───────────────────────────────── */
+    db.ref('businesses/' + businessId + '/faqs').on('value', function (snap) {
+      state.faqs = [];
+      if (snap.exists()) {
+        snap.forEach(function (child) {
+          var faq = child.val();
+          if (faq.question && faq.answer) state.faqs.push({ question: faq.question, answer: faq.answer });
+        });
+      }
+      if (!state.faqsReady) {
+        state.faqsReady = true;
+        tryInitialRender();
+      } else {
+        if (state.view === 'home' || (state.view === 'chat' && !state.messages.length)) render();
+      }
+    }, function (err) {
+      if (err.code === 'PERMISSION_DENIED') state.permissionError = true;
+      if (!state.faqsReady) { state.faqsReady = true; tryInitialRender(); }
+    });
+
+    /* ── Coordinate initial render ────────────────────────────── */
+    function tryInitialRender() {
+      if (!state.profileReady || !state.faqsReady) return;
+      if (state.historyPending) {
+        restoreChat(state.chatId, function () {
+          state.historyPending = false;
+          state.loading = false;
+          render();
+        });
+      } else {
+        state.loading = false;
+        render();
+      }
+    }
+
+    /* ── Restore a previous chat from Firebase ────────────────── */
+    function restoreChat(chatId, done) {
+      /* Also check chat status to restore ended state */
+      db.ref('businesses/' + businessId + '/chats/' + chatId).once('value', function(chatSnap) {
+        if (!chatSnap.exists()) {
+          localStorage.removeItem(CID_KEY);
+          state.chatId = null;
+          done();
+          return;
+        }
+        var chatData = chatSnap.val() || {};
+        if (chatData.status === 'ended') {
+          state.conversationEnded = true;
+          /* Check if CSAT already submitted */
+          if (chatData.csatScore) state.csatSubmitted = true;
+        }
+
+        var msgsSnap = chatSnap.child('messages');
+        var msgs = [];
+        msgsSnap.forEach(function(child) {
+          var msg = child.val();
+          if (!msg || !msg.text) return;
+          msgs.push({ role: msg.role || 'bot', text: msg.text, id: ++state.msgCounter });
+          if (msg.role === 'agent') state.agentMsgKeys[child.key] = true;
+        });
+        state.messages = msgs;
+        startListeningForAgentMessages();
+        startListeningForChatStatus();
+        done();
+      }, function() { done(); });
+    }
+
+    /* ── Clear conversation ───────────────────────────────────── */
+    function clearConversation() {
+      localStorage.removeItem(CID_KEY);
+      localStorage.removeItem(LEAD_KEY);
+      if (state.chatId) {
+        try { db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages').off(); } catch (e) {}
+        try { db.ref('businesses/' + businessId + '/chats/' + state.chatId).off(); } catch (e) {}
+      }
+      state.chatId            = null;
+      state.chatListening     = false;
+      state.messages          = [];
+      state.agentMsgKeys      = {};
+      state.showLeadForm      = false;
+      state.leadCaptured      = false;
+      state.msgCounter        = 0;
+      state.conversationEnded = false;
+      state.csatSubmitted     = false;
+      state.csatScore         = 0;
+      state.view              = 'home';
+      render();
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       RENDER ENGINE
+    ════════════════════════════════════════════════════════════ */
+    var root = document.getElementById('app');
+
+    function render() {
+      var c = state.profile.themeColor || '#7c3aed';
+      document.documentElement.style.setProperty('--primary',   c);
+      document.documentElement.style.setProperty('--primary-l', lighten(c));
+
+      if (state.view === 'launcher') {
+        root.innerHTML = launcherHtml();
+        document.getElementById('btn-launcher').onclick = openWidget;
+        notifyResize(false);
+        return;
+      }
+
+      notifyResize(true);
+
+      if (state.view === 'home') {
+        root.innerHTML = homeHtml();
+        wireHome();
+        return;
+      }
+
+      /* Chat panel */
+      var existingPanel = document.getElementById('drx-panel');
+      if (!existingPanel) {
+        root.innerHTML = chatPanelHtml();
+        wirePanel();
+        scrollMessages();
+      } else {
+        patchPanel();
+        scrollMessages();
+      }
+    }
+
+    /* ── Patch dynamic sections of an existing panel ─────────── */
+    function patchPanel() {
+      var msgArea = document.getElementById('msg-area');
+      if (msgArea) msgArea.innerHTML = messagesInnerHtml();
+
+      var chipsArea = document.getElementById('chips-area');
+      if (chipsArea) chipsArea.innerHTML = chipsInnerHtml();
+
+      var inputArea = document.getElementById('input-area');
+      if (inputArea) {
+        var needLeadForm = state.showLeadForm && !state.leadCaptured;
+        var hasLeadForm  = !!document.getElementById('lead-form');
+        var wasEnded     = !!document.getElementById('ended-notice');
+        var nowEnded     = state.conversationEnded;
+        if (needLeadForm !== hasLeadForm || wasEnded !== nowEnded) {
+          inputArea.innerHTML = inputInnerHtml();
+          wireInputArea();
+        }
+      }
+
+      /* CSAT box */
+      var csatArea = document.getElementById('csat-area');
+      if (csatArea) csatArea.innerHTML = csatInnerHtml();
+      wireCsat();
+
+      wireChips();
+
+      var newChatSpan = document.getElementById('new-chat-span');
+      if (newChatSpan) {
+        newChatSpan.style.display = state.messages.length ? '' : 'none';
+        wireNewChatBtn();
+      }
+
+      var fsBtn = document.getElementById('btn-fullscreen');
+      if (fsBtn) fsBtn.innerHTML = state.fullscreen ? '&#x292E;' : '&#x2922;';
+    }
+
+    function scrollMessages() {
+      var msgArea = document.getElementById('msg-area');
+      if (msgArea) msgArea.scrollTop = msgArea.scrollHeight;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       HTML BUILDERS
+    ════════════════════════════════════════════════════════════ */
+
+    function launcherHtml() {
+      return '<button id="btn-launcher" class="launcher" aria-label="Open support chat">💬</button>';
+    }
+
+    function homeHtml() {
+      var bizName = esc(state.profile.chatTitle || state.profile.name || 'Support');
+      var logoEl  = state.profile.logoUrl
+        ? '<div class="home-logo-wrap"><img src="' + esc(state.profile.logoUrl) + '" alt="logo"></div>'
+        : '<div class="home-logo-wrap">' + esc((state.profile.name || 'S').slice(0, 2).toUpperCase()) + '</div>';
+
+      var topics = state.faqs.length > 0
+        ? state.faqs.slice(0, 4).map(function (f) { return f.question; })
+        : ['How can you help me?', 'Pricing & plans', 'Technical support', 'Report an issue'];
+
+      var topicsHtml = '<div class="home-section-label">Browse topics</div>' +
+        topics.map(function (q) {
+          return '<button class="home-faq-chip" data-chip="' + esc(q) + '">' +
+            '<span class="faq-chip-text">' + esc(q) + '</span>' +
+            '<span class="faq-arrow">›</span></button>';
+        }).join('');
+
+      return (
+        '<div class="home-screen">' +
+          '<div class="home-hero">' +
+            '<div class="home-hero-top">' + logoEl +
+              '<div>' +
+                '<div class="home-biz-name">' + bizName + '</div>' +
+                '<div class="home-biz-status">✅ Online · Replies instantly</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="home-greeting">Hi there 👋</div>' +
+            '<div class="home-tagline">' + esc(state.profile.welcomeMessage) + '</div>' +
+            '<button id="btn-close-home" class="home-close-btn" aria-label="Close">×</button>' +
+          '</div>' +
+          '<div class="home-body">' +
+            topicsHtml +
+            '<button id="btn-start-chat" class="home-start-btn">💬&nbsp;&nbsp;New conversation</button>' +
+          '</div>' +
+          '<div class="panel-footer">Powered by ' +
+            '<a href="https://daviddchucks-hash.github.io/drexorasupport/" target="_blank">Drexora Support</a>' +
+          '</div>' +
+        '</div>' +
+        '<button id="btn-launcher" class="launcher" style="margin-top:10px" aria-label="Close support chat">×</button>'
+      );
+    }
+
+    function chatPanelHtml() {
+      if (state.permissionError) return permissionErrorHtml();
+
+      var title  = esc(state.profile.chatTitle || state.profile.name || 'Support');
+      var logoEl = state.profile.logoUrl
+        ? '<div class="logo-wrap"><img src="' + esc(state.profile.logoUrl) + '" alt="logo"></div>'
+        : '<div class="logo-wrap">' + esc((state.profile.name || 'S').slice(0, 2).toUpperCase()) + '</div>';
+
+      return (
+        '<div class="panel" id="drx-panel">' +
+          '<div class="panel-header">' + logoEl +
+            '<div class="header-text">' +
+              '<div class="header-title">' + title + '</div>' +
+              '<div class="header-status">' + (state.conversationEnded ? '🏁 Conversation Ended' : '✅ Online · Usually replies instantly') + '</div>' +
+            '</div>' +
+            '<button id="btn-fullscreen" class="header-btn" title="' +
+              (state.fullscreen ? 'Exit fullscreen' : 'Fullscreen') + '">' +
+              (state.fullscreen ? '&#x292E;' : '&#x2922;') +
+            '</button>' +
+            '<button id="btn-close" class="header-btn" aria-label="Close">×</button>' +
+          '</div>' +
+          '<div class="messages" id="msg-area">' + messagesInnerHtml() + '</div>' +
+          '<div id="chips-area">' + chipsInnerHtml() + '</div>' +
+          '<div id="csat-area">' + csatInnerHtml() + '</div>' +
+          '<div id="input-area">' + inputInnerHtml() + '</div>' +
+          '<div class="panel-footer">' +
+            'Powered by <a href="https://daviddchucks-hash.github.io/drexorasupport/" target="_blank">Drexora Support</a>' +
+            '<span id="new-chat-span" style="' + (state.messages.length ? '' : 'display:none') + '">' +
+              '&nbsp;·&nbsp;<button id="btn-new-chat" class="footer-new-chat">New conversation</button>' +
+            '</span>' +
+          '</div>' +
+        '</div>' +
+        '<button id="btn-launcher" class="launcher" style="margin-top:10px" aria-label="Close support chat">×</button>'
+      );
+    }
+
+    function permissionErrorHtml() {
+      return (
+        '<div class="panel" id="drx-panel">' +
+          '<div class="panel-header">' +
+            '<div class="logo-wrap">⚙️</div>' +
+            '<div class="header-text">' +
+              '<div class="header-title">Widget Setup Required</div>' +
+              '<div class="header-status">⚠️ Configuration needed</div>' +
+            '</div>' +
+            '<button id="btn-close" class="header-btn" aria-label="Close">×</button>' +
+          '</div>' +
+          '<div class="messages" id="msg-area" style="align-items:center;justify-content:center;text-align:center;padding:24px 20px;max-height:280px">' +
+            '<div style="font-size:28px;margin-bottom:10px">🔒</div>' +
+            '<div style="font-weight:700;font-size:.95rem;margin-bottom:8px">Firebase Rules Need Updating</div>' +
+            '<div style="font-size:.8rem;color:#6b7280;line-height:1.6">' +
+              'The widget cannot load your data because your Firebase Realtime Database rules block public access.<br><br>' +
+              'Go to your <strong>Firebase Console → Realtime Database → Rules</strong> and update them.' +
+            '</div>' +
+          '</div>' +
+          '<div id="csat-area"></div>' +
+          '<div id="input-area"></div>' +
+          '<div class="panel-footer">Powered by <a href="https://daviddchucks-hash.github.io/drexorasupport/" target="_blank">Drexora Support</a></div>' +
+        '</div>' +
+        '<button id="btn-launcher" class="launcher" style="margin-top:10px" aria-label="Close">×</button>'
+      );
+    }
+
+    /* ── Inner HTML builders ─────────────────────────────────── */
+
+    function messagesInnerHtml() {
+      var welcomeHtml = '<div class="bubble bot">' + esc(state.profile.welcomeMessage) + '</div>';
+      if (state.loading) {
+        return welcomeHtml;
+      }
+      var html = welcomeHtml + state.messages.map(function (m) {
+        if (m.role === 'agent') return '<div class="bubble agent">' + esc(m.text) + '</div>';
+        return '<div class="bubble ' + m.role + '">' + esc(m.text) + '</div>';
+      }).join('');
+      if (state.conversationEnded && !state.csatSubmitted) {
+        /* show a subtle system bubble that CSAT is requested */
+      }
+      return html;
+    }
+
+    function chipsInnerHtml() {
+      if (state.messages.length || state.loading || state.conversationEnded) return '';
+      var chipItems = state.faqs.length > 0
+        ? state.faqs.slice(0, 5).map(function (f) { return f.question; })
+        : ['How can you help me?', 'What are your prices?', 'I have an issue'];
+      return '<div class="chips">' +
+        chipItems.map(function (p) {
+          return '<button class="chip" data-chip="' + esc(p) + '">' + esc(p) + '</button>';
+        }).join('') +
+      '</div>';
+    }
+
+    /* ── CSAT box HTML ─────────────────────────────────────────── */
+    function csatInnerHtml() {
+      if (!state.conversationEnded) return '';
+      if (state.csatSubmitted) {
+        return '<div class="csat-box" style="text-align:center">' +
+          '<div style="font-size:24px;margin-bottom:6px">🙏</div>' +
+          '<div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:4px">Thank you for your feedback!</div>' +
+          '<div style="font-size:11px;color:#6b7280">Your rating has been submitted. We appreciate you taking the time.</div>' +
+        '</div>';
+      }
+      var starsHtml = '';
+      for (var i = 1; i <= 5; i++) {
+        starsHtml += '<span class="csat-star" data-score="' + i + '" style="color:' + (i <= state.csatScore ? '#f59e0b' : '#d1d5db') + '">★</span>';
+      }
+      return (
+        '<div class="csat-box" id="csat-box">' +
+          '<div class="csat-title">How was your experience?</div>' +
+          '<div class="csat-sub">Rate your conversation with our team</div>' +
+          '<div class="csat-stars" id="csat-stars">' + starsHtml + '</div>' +
+          '<textarea class="csat-comment" id="csat-comment" rows="2" placeholder="Leave a comment (optional)…"' +
+            ' style="' + (state.csatScore > 0 ? 'display:block' : 'display:none') + '"></textarea>' +
+          '<button class="csat-submit" id="csat-submit"' +
+            ' style="' + (state.csatScore > 0 ? 'display:block' : 'display:none') + '">Submit Rating</button>' +
+          '<div class="csat-thanks" id="csat-thanks"></div>' +
+        '</div>'
+      );
+    }
+
+    function inputInnerHtml() {
+      /* Conversation ended — show notice, no input */
+      if (state.conversationEnded) {
+        return (
+          '<div class="ended-notice" id="ended-notice">' +
+            '🏁 This conversation has ended. ' +
+            '<button id="btn-new-chat-ended" class="footer-new-chat" style="font-size:11px">Start a new conversation →</button>' +
+          '</div>'
+        );
+      }
+
+      if (state.showLeadForm && !state.leadCaptured) {
+        return (
+          '<form id="lead-form" class="lead-form">' +
+            '<p class="lead-form-title">Leave your details and we\'ll be in touch:</p>' +
+            '<input class="lead-input" name="visitorName" required placeholder="Your name">' +
+            '<input class="lead-input" name="email" type="email" required placeholder="Email address">' +
+            '<input class="lead-input" name="phone" placeholder="Phone number (optional)">' +
+            '<button type="submit" class="lead-submit">Send my details →</button>' +
+          '</form>'
+        );
+      }
+      return (
+        '<div class="input-row">' +
+          '<input id="chat-input" class="chat-input" type="text" placeholder="Type a message…" autocomplete="off">' +
+          '<button id="btn-send" class="send-btn" aria-label="Send">➤</button>' +
+        '</div>'
+      );
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       WIRE-UP HELPERS
+    ════════════════════════════════════════════════════════════ */
+
+    function wireHome() {
+      var closeBtn = document.getElementById('btn-close-home');
+      if (closeBtn) closeBtn.onclick = closeWidget;
+
+      var launcherBtn = document.getElementById('btn-launcher');
+      if (launcherBtn) launcherBtn.onclick = closeWidget;
+
+      var startBtn = document.getElementById('btn-start-chat');
+      if (startBtn) startBtn.onclick = function () {
+        state.view = 'chat';
+        render();
+        setTimeout(function () {
+          var inp = document.getElementById('chat-input');
+          if (inp) inp.focus();
+        }, 80);
+      };
+
+      document.querySelectorAll('.home-faq-chip[data-chip]').forEach(function (btn) {
+        btn.onclick = function () {
+          var question = btn.getAttribute('data-chip');
+          state.view = 'chat';
+          render();
+          setTimeout(function () { sendMessage(question); }, 60);
+        };
+      });
+    }
+
+    function wirePanel() {
+      var closeBtn = document.getElementById('btn-close');
+      if (closeBtn) closeBtn.onclick = closeWidget;
+
+      var fsBtn = document.getElementById('btn-fullscreen');
+      if (fsBtn) fsBtn.onclick = toggleFullscreen;
+
+      var launcherBtn = document.getElementById('btn-launcher');
+      if (launcherBtn) launcherBtn.onclick = closeWidget;
+
+      wireInputArea();
+      wireChips();
+      wireNewChatBtn();
+      wireCsat();
+    }
+
+    function wireInputArea() {
+      var chatInput = document.getElementById('chat-input');
+      var sendBtn   = document.getElementById('btn-send');
+      if (chatInput && sendBtn) {
+        sendBtn.onclick     = function () { sendMessage(chatInput.value); };
+        chatInput.onkeydown = function (e) {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(chatInput.value); }
+        };
+      }
+      var leadForm = document.getElementById('lead-form');
+      if (leadForm) leadForm.onsubmit = submitLead;
+
+      /* New conversation button inside ended notice */
+      var newChatEnded = document.getElementById('btn-new-chat-ended');
+      if (newChatEnded) newChatEnded.onclick = function() {
+        if (confirm('Start a new conversation? Your current chat history will be cleared.')) {
+          clearConversation();
+        }
+      };
+    }
+
+    function wireChips() {
+      document.querySelectorAll('[data-chip]').forEach(function (btn) {
+        btn.onclick = function () { sendMessage(btn.getAttribute('data-chip')); };
+      });
+    }
+
+    function wireNewChatBtn() {
+      var btn = document.getElementById('btn-new-chat');
+      if (btn) btn.onclick = function () {
+        if (confirm('Start a new conversation? Your current chat history will be cleared.')) {
+          clearConversation();
+        }
+      };
+    }
+
+    /* ── Wire CSAT interactions ──────────────────────────────── */
+    function wireCsat() {
+      var stars = document.querySelectorAll('.csat-star');
+      if (!stars.length) return;
+
+      stars.forEach(function(star) {
+        var score = parseInt(star.getAttribute('data-score'), 10);
+
+        star.onmouseenter = function() {
+          stars.forEach(function(s, i) {
+            s.style.color = (i < score) ? '#f59e0b' : '#d1d5db';
+          });
+        };
+        star.onmouseleave = function() {
+          stars.forEach(function(s, i) {
+            s.style.color = (i < state.csatScore) ? '#f59e0b' : '#d1d5db';
+          });
+        };
+        star.onclick = function() {
+          state.csatScore = score;
+          /* Show comment and submit button */
+          var comment = document.getElementById('csat-comment');
+          var submit  = document.getElementById('csat-submit');
+          if (comment) comment.style.display = 'block';
+          if (submit)  submit.style.display  = 'block';
+          /* Update star colours */
+          stars.forEach(function(s, i) {
+            s.style.color = (i < score) ? '#f59e0b' : '#d1d5db';
+          });
+        };
+      });
+
+      var submitBtn = document.getElementById('csat-submit');
+      if (submitBtn) {
+        submitBtn.onclick = submitCsat;
+      }
+    }
+
+    /* ── Submit CSAT rating ──────────────────────────────────── */
+    function submitCsat() {
+      if (!state.csatScore || !state.chatId) return;
+      var comment = (document.getElementById('csat-comment')?.value || '').trim();
+      var submitBtn = document.getElementById('csat-submit');
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…'; }
+
+      try {
+        /* Save to csatReports collection */
+        db.ref('businesses/' + businessId + '/csatReports/' + state.chatId).set({
+          chatId:        state.chatId,
+          score:         state.csatScore,
+          comment:       comment,
+          visitorId:     state.visitorId,
+          customerName:  '',   /* populated below if available */
+          customerEmail: '',
+          agentName:     '',
+          createdAt:     firebase.database.ServerValue.TIMESTAMP
+        });
+
+        /* Also store score on the chat document so agents see it */
+        db.ref('businesses/' + businessId + '/chats/' + state.chatId).update({
+          csatScore:   state.csatScore,
+          csatComment: comment,
+          csatAt:      firebase.database.ServerValue.TIMESTAMP
+        });
+
+        /* Enrich with customer details if we have them */
+        db.ref('businesses/' + businessId + '/chats/' + state.chatId).once('value', function(snap) {
+          var d = snap.val() || {};
+          db.ref('businesses/' + businessId + '/csatReports/' + state.chatId).update({
+            customerName:  d.customerName  || '',
+            customerEmail: d.customerEmail || '',
+            agentName:     d.endedByName   || ''
+          });
+        });
+      } catch(e) { /* silent */ }
+
+      state.csatSubmitted = true;
+
+      /* Re-render CSAT area with thanks */
+      var csatArea = document.getElementById('csat-area');
+      if (csatArea) {
+        csatArea.innerHTML = csatInnerHtml();
+      }
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       FAQ MATCHING
+    ════════════════════════════════════════════════════════════ */
+    function findFaqMatch(text) {
+      if (!state.faqs.length) return null;
+
+      var lc = text.toLowerCase().trim();
+      if (lc.length < 2) return null;
+
+      var STOP = { 'the':1,'and':1,'for':1,'are':1,'but':1,'not':1,'you':1,'all':1,'can':1,'her':1,'was':1,'one':1,'our':1,'out':1,'had':1,'has':1,'his':1,'how':1,'its':1,'may':1,'new':1,'now':1,'old':1,'see':1,'two':1,'way':1,'who':1,'did':1,'get':1,'use':1,'him':1,'let':1,'put':1,'too':1,'why':1,'got':1,'what':1,'this':1,'that':1,'with':1,'from':1,'they':1,'have':1,'been':1,'will':1,'when':1,'your':1,'just':1,'also':1,'more':1,'some':1,'then':1,'than':1,'into':1,'over':1,'like':1,'does':1,'here':1,'tell':1,'give':1,'want':1 };
+
+      function keywords(str) {
+        return str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(function (w) {
+          return w.length >= 2 && !STOP[w];
+        });
+      }
+
+      var userWords = keywords(text);
+      if (!userWords.length) {
+        var bare = lc.replace(/[^a-z0-9]/g, '');
+        if (bare.length >= 2) userWords = [bare];
+        else return null;
+      }
+
+      var best = null, bestScore = 0;
+      for (var i = 0; i < state.faqs.length; i++) {
+        var faq    = state.faqs[i];
+        var qLc    = (faq.question || '').toLowerCase();
+        var aLc    = (faq.answer   || '').toLowerCase();
+        var qWords = keywords(faq.question || '');
+        var score  = 0;
+
+        if (qLc.includes(lc) || lc.includes(qLc)) score += 8;
+        qWords.forEach(function (w) { if (lc.includes(w)) score += 2; });
+        userWords.forEach(function (w) {
+          if (qLc.includes(w)) score += 2;
+          if (aLc.includes(w)) score += 1;
+        });
+
+        if (score > 0 && score > bestScore) { bestScore = score; best = faq; }
+      }
+
+      return bestScore >= 2 ? best : null;
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       SEND MESSAGE
+       AI responses are immediate — no typing delay.
+    ════════════════════════════════════════════════════════════ */
+    function sendMessage(text) {
+      text = (text || '').trim();
+      if (!text) return;
+
+      /* Block sending if conversation has ended */
+      if (state.conversationEnded) return;
+
+      var inputEl = document.getElementById('chat-input');
+      if (inputEl) inputEl.value = '';
+
+      state.messages.push({ role: 'user', text: text, id: ++state.msgCounter });
+      render(); /* show user message immediately */
+
+      /* Process FAQ / lead logic immediately — no typing delay */
+      var match = findFaqMatch(text);
+      if (match) {
+        state.messages.push({ role: 'bot', text: match.answer, id: ++state.msgCounter });
+        saveChat(text, match.answer);
+        state.showLeadForm = false;
+      } else if (!state.leadCaptured) {
+        state.messages.push({
+          role: 'bot',
+          text: "I couldn't find a direct answer to that. To connect you with a live agent, please share your name, email and phone number below.",
+          id: ++state.msgCounter
+        });
+        state.showLeadForm = true;
+        saveChat(text, "Couldn't find a FAQ match — requesting lead details.");
+      } else {
+        state.messages.push({
+          role: 'bot',
+          text: "Got your message! A member of our team will follow up with you shortly.",
+          id: ++state.msgCounter
+        });
+        saveChat(text, "Post-lead follow-up message.");
+      }
+
+      render();
+    }
+
+    /* ── Save chat to Realtime DB ─────────────────────────────── */
+    function saveChat(userMsg, botMsg) {
+      try {
+        if (!state.chatId) {
+          var chatRef = db.ref('businesses/' + businessId + '/chats').push();
+          state.chatId = chatRef.key;
+          localStorage.setItem(CID_KEY, state.chatId);
+          chatRef.set({
+            visitorId:     state.visitorId,
+            createdAt:     firebase.database.ServerValue.TIMESTAMP,
+            updatedAt:     firebase.database.ServerValue.TIMESTAMP,
+            status:        'ai',
+            priority:      'medium',
+            assignedTo:    null,
+            customerName:  '',
+            customerEmail: ''
+          });
+          startListeningForAgentMessages();
+          startListeningForChatStatus();
+        }
+        var msgsRef = db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages');
+        msgsRef.push({ role: 'user', text: userMsg, timestamp: firebase.database.ServerValue.TIMESTAMP });
+        msgsRef.push({ role: 'bot',  text: botMsg,  timestamp: firebase.database.ServerValue.TIMESTAMP });
+      } catch (e) { /* silent */ }
+    }
+
+    /* ── Listen for agent messages ────────────────────────────── */
+    function startListeningForAgentMessages() {
+      if (state.chatListening || !state.chatId) return;
+      state.chatListening = true;
+
+      db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages')
+        .on('child_added', function (snap) {
+          var msg = snap.val();
+          var key = snap.key;
+          if (!msg || msg.role !== 'agent') return;
+          if (state.agentMsgKeys[key]) return;
+          state.agentMsgKeys[key] = true;
+
+          state.messages.push({ role: 'agent', text: msg.text || '', id: ++state.msgCounter });
+          if (state.view === 'chat') render();
+        });
+    }
+
+    /* ── Listen for chat status changes (ended, etc.) ─────────── */
+    function startListeningForChatStatus() {
+      if (!state.chatId) return;
+
+      db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/status')
+        .on('value', function(snap) {
+          var status = snap.val();
+          if (status === 'ended' && !state.conversationEnded) {
+            state.conversationEnded = true;
+            if (state.view === 'chat') render();
+          }
+        });
+
+      /* Also watch for CSAT score being set (e.g. by another widget session) */
+      db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/csatScore')
+        .on('value', function(snap) {
+          if (snap.val() && !state.csatSubmitted) {
+            state.csatSubmitted = true;
+            state.csatScore     = snap.val();
+            if (state.view === 'chat') render();
+          }
+        });
+    }
+
+    /* ── Submit lead form ─────────────────────────────────────── */
+    function submitLead(e) {
+      e.preventDefault();
+      var form        = e.target;
+      var visitorName = (form.visitorName.value || '').trim();
+      var email       = (form.email.value       || '').trim();
+      var phone       = (form.phone.value        || '').trim();
+      if (!visitorName || !email) return;
+
+      var lastUserMsg = '';
+      for (var i = state.messages.length - 1; i >= 0; i--) {
+        if (state.messages[i].role === 'user') { lastUserMsg = state.messages[i].text; break; }
+      }
+
+      try {
+        db.ref('businesses/' + businessId + '/leads').push({
+          visitorName: visitorName,
+          email:       email,
+          phone:       phone,
+          message:     lastUserMsg,
+          visitorId:   state.visitorId,
+          read:        false,
+          source:      'widget',
+          createdAt:   firebase.database.ServerValue.TIMESTAMP
+        });
+      } catch (err) { /* silent */ }
+
+      state.showLeadForm = false;
+      state.leadCaptured = true;
+      localStorage.setItem(LEAD_KEY, '1');
+
+      if (state.chatId) {
+        try {
+          db.ref('businesses/' + businessId + '/chats/' + state.chatId).update({
+            status:        'waiting_for_agent',
+            updatedAt:     firebase.database.ServerValue.TIMESTAMP,
+            customerName:  visitorName,
+            customerEmail: email
+          });
+          db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/activityLog').push({
+            action:    'AI handed off — waiting for agent',
+            byUid:     'system',
+            byName:    'AI Bot',
+            type:      'handoff',
+            timestamp: Date.now()
+          });
+        } catch (e) { /* silent */ }
+      }
+
+      state.messages.push({
+        role: 'bot',
+        text: 'Thanks, ' + esc(visitorName) + '! Your details have been received. One of our team members will join this chat shortly. Feel free to keep chatting!',
+        id: ++state.msgCounter
+      });
+      render();
+    }
+
+    /* ── Open / Close ─────────────────────────────────────────── */
+    function openWidget() {
+      state.view = (state.messages.length > 0 || state.historyPending || state.loading || state.conversationEnded)
+        ? 'chat'
+        : 'home';
+      render();
+    }
+
+    function closeWidget() {
+      if (state.fullscreen) {
+        state.fullscreen = false;
+        notifyFullscreen(false);
+        root.classList.remove('is-fullscreen');
+      }
+      state.view = 'launcher';
+      render();
+    }
+    window.closeWidget = closeWidget;
+
+    /* ── Fullscreen toggle ────────────────────────────────────── */
+    function toggleFullscreen() {
+      state.fullscreen = !state.fullscreen;
+      notifyFullscreen(state.fullscreen);
+
+      if (state.fullscreen) {
+        root.classList.add('is-fullscreen');
+      } else {
+        root.classList.remove('is-fullscreen');
+      }
+
+      var fsBtn = document.getElementById('btn-fullscreen');
+      if (fsBtn) {
+        fsBtn.innerHTML = state.fullscreen ? '&#x292E;' : '&#x2922;';
+        fsBtn.title     = state.fullscreen ? 'Exit fullscreen' : 'Fullscreen';
+      }
+    }
+
+    /* ── postMessage helpers ──────────────────────────────────── */
+    function notifyResize(open) {
+      try { window.parent.postMessage({ type: 'drexora-resize', open: open }, '*'); } catch (e) {}
+    }
+    function notifyFullscreen(full) {
+      try { window.parent.postMessage({ type: 'drexora-fullscreen', full: full }, '*'); } catch (e) {}
+    }
+
+    /* ── Helpers ──────────────────────────────────────────────── */
+    function esc(str) {
+      return String(str || '').replace(/[&<>"']/g, function (c) {
+        return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' })[c];
+      });
+    }
+
+    function lighten(hex) {
+      try {
+        var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+        r = Math.min(255,r+60); g = Math.min(255,g+60); b = Math.min(255,b+60);
+        return '#' + [r,g,b].map(function(v){return v.toString(16).padStart(2,'0');}).join('');
+      } catch(e) { return '#a78bfa'; }
+    }
+
+    /* ── Initial render ───────────────────────────────────────── */
+    render();
+
+  }());
+  </script>
+</body>
+</html>

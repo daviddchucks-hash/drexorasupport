@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drexora Support</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: transparent; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      color: #1a1a2e;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; cursor: pointer; border: none; }
+
+    /* ── CSS variables (overridden by JS from business theme) ── */
+    :root {
+      --primary:   #7c3aed;
+      --primary-l: #a78bfa;
+      --ink:       #1a1a2e;
+      --paper:     #f8f7ff;
+      --muted:     #6b7280;
+      --border:    #e5e7eb;
+    }
+
+    /* ── Widget root ─────────────────────────────────────────── */
+    #app {
+      position: fixed;
+      right: 0; bottom: 0;
+      width: min(370px, 100vw);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    /* ── Launcher button ────────────────────────────────────── */
+    .launcher {
+      display: flex; align-items: center; justify-content: center;
+      width: 58px; height: 58px;
+      margin-bottom: 12px;
+      border-radius: 18px;
+      background: var(--primary);
+      color: #fff; font-size: 22px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.28);
+      transition: transform .2s ease, box-shadow .2s ease;
+      flex-shrink: 0;
+    }
+    .launcher:hover  { transform: translateY(-2px) scale(1.04); box-shadow: 0 12px 36px rgba(0,0,0,.32); }
+    .launcher:active { transform: scale(.97); }
+
+    /* ── Chat panel ─────────────────────────────────────────── */
+    .panel {
+      width: 100%;
+      border-radius: 18px 18px 0 0;
+      background: var(--paper);
+      box-shadow: 0 -4px 32px rgba(0,0,0,.12), 0 20px 60px rgba(0,0,0,.25);
+      overflow: hidden;
+      animation: riseIn .28s cubic-bezier(.22,.68,0,1.2) both;
+    }
+    @keyframes riseIn {
+      from { opacity: 0; transform: translateY(20px) scale(.97); }
+      to   { opacity: 1; transform: translateY(0)   scale(1); }
+    }
+
+    /* Panel header */
+    .panel-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 18px;
+      background: var(--primary); color: #fff;
+    }
+    .logo-wrap {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: rgba(255,255,255,.2);
+      display: grid; place-items: center;
+      font-size: 18px; font-weight: 800; flex-shrink: 0; overflow: hidden;
+    }
+    .logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    .header-text { flex: 1; }
+    .header-title  { font-size: 14px; font-weight: 700; }
+    .header-status { font-size: 11px; opacity: .8; margin-top: 1px; }
+    .header-close {
+      background: rgba(255,255,255,.15); border-radius: 8px; color: #fff;
+      width: 30px; height: 30px; display: grid; place-items: center;
+      font-size: 18px; transition: background .15s;
+    }
+    .header-close:hover { background: rgba(255,255,255,.25); }
+
+    /* Messages area */
+    .messages {
+      max-height: 340px; overflow-y: auto;
+      padding: 16px; display: flex; flex-direction: column; gap: 10px;
+      scroll-behavior: smooth;
+    }
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+
+    /* Bubbles */
+    .bubble {
+      max-width: 82%; padding: 10px 13px; border-radius: 14px;
+      font-size: 13px; line-height: 1.55;
+      animation: bubbleIn .2s ease both;
+    }
+    @keyframes bubbleIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .bubble.bot    { align-self: flex-start; background: #ede9fe; color: var(--ink); border-top-left-radius: 4px; }
+    .bubble.user   { align-self: flex-end;   background: var(--primary); color: #fff; border-top-right-radius: 4px; }
+    .bubble.system { align-self: center; background: #f3f4f6; color: var(--muted); font-size: 11px; padding: 6px 12px; }
+    /* Agent messages — identical look to bot/AI messages */
+    .bubble.agent  { align-self: flex-start; background: #ede9fe; color: var(--ink); border-top-left-radius: 4px; }
+
+    /* Typing indicator */
+    .typing {
+      align-self: flex-start; display: flex; gap: 4px;
+      padding: 12px 14px; background: #ede9fe;
+      border-radius: 14px; border-top-left-radius: 4px;
+    }
+    .typing span {
+      width: 7px; height: 7px; background: var(--primary); border-radius: 50%;
+      animation: bounce .8s ease infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: .15s; }
+    .typing span:nth-child(3) { animation-delay: .30s; }
+    @keyframes bounce { 0%,100% { transform: translateY(0); opacity: .5; } 50% { transform: translateY(-5px); opacity: 1; } }
+
+    /* Quick-reply chips */
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
+    .chip {
+      padding: 8px 13px; border: 1.5px solid var(--primary-l);
+      border-radius: 99px; background: #fff; color: var(--primary);
+      font-size: 12px; font-weight: 600; transition: all .15s; white-space: nowrap;
+    }
+    .chip:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* Input row */
+    .input-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; border-top: 1px solid var(--border); background: #fff;
+    }
+    .chat-input {
+      flex: 1; border: 1.5px solid var(--border); border-radius: 10px;
+      padding: 9px 12px; font-size: 13px; color: var(--ink);
+      outline: none; transition: border-color .15s; background: #fafafa;
+    }
+    .chat-input:focus { border-color: var(--primary-l); background: #fff; }
+    .chat-input::placeholder { color: #9ca3af; }
+    .send-btn {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--primary); color: #fff;
+      display: grid; place-items: center; flex-shrink: 0; font-size: 16px;
+      transition: opacity .15s;
+    }
+    .send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* Lead capture form */
+    .lead-form {
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 8px 16px 16px; animation: riseIn .2s ease both;
+    }
+    .lead-form-title { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .lead-input {
+      width: 100%; border: 1.5px solid var(--border); border-radius: 9px;
+      padding: 9px 12px; font-size: 13px; color: var(--ink);
+      background: #fafafa; outline: none; transition: border-color .15s;
+    }
+    .lead-input:focus { border-color: var(--primary-l); background: #fff; }
+    .lead-input::placeholder { color: #9ca3af; }
+    .lead-submit {
+      padding: 10px; background: var(--primary); color: #fff;
+      border-radius: 9px; font-size: 13px; font-weight: 700; transition: opacity .15s;
+    }
+    .lead-submit:hover { opacity: .9; }
+
+    /* Panel footer */
+    .panel-footer {
+      padding: 8px 14px; border-top: 1px solid var(--border);
+      text-align: center; font-size: 10px; color: var(--muted);
+    }
+    .panel-footer a { color: var(--muted); text-decoration: none; }
+    .footer-new-chat {
+      background: none; border: none; padding: 0;
+      font-size: 10px; color: var(--muted);
+      cursor: pointer; text-decoration: underline; font-family: inherit;
+    }
+    .footer-new-chat:hover { color: var(--primary); }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <script>
+  (function () {
+    'use strict';
+
+    /* ── Firebase config ──────────────────────────────────────── */
+    var FIREBASE_CONFIG = {
+      apiKey:            'AIzaSyA1wX_0tastbk_hWfI0_cvuV9ZzoIKitL4',
+      authDomain:        'drexorasupport.firebaseapp.com',
+      projectId:         'drexorasupport',
+      storageBucket:     'drexorasupport.firebasestorage.app',
+      messagingSenderId: '669148105903',
+      appId:             '1:669148105903:web:69641657318107bf1a185a',
+      databaseURL:       'https://drexorasupport-default-rtdb.firebaseio.com'
+    };
+
+    /* ── Parse business ID ────────────────────────────────────── */
+    var businessId = new URLSearchParams(window.location.search).get('business');
+    if (!businessId) { console.warn('[Drexora] No business ID.'); return; }
+
+    /* ── Widget state ─────────────────────────────────────────── */
+    var state = {
+      open:              false,
+      loading:           true,
+      permissionError:   false,  // true when Firebase rules block anonymous reads
+      profile:           { name: 'Support', welcomeMessage: 'Hi! How can we help you today?', themeColor: '#7c3aed', chatTitle: '', logoUrl: '' },
+      faqs:              [],
+      messages:          [],
+      showLeadForm:      false,
+      leadCaptured:      false,
+      visitorId:         null,
+      chatId:            null,
+      msgCounter:        0,
+      profileReady:      false,
+      faqsReady:         false,
+      chatListening:     false,  // true once we have subscribed to chat messages
+      agentMsgKeys:      {},     // Firebase keys of agent messages already displayed
+      historyPending:    false   // true when we need to load prior messages before first render
+    };
+
+    /* ── Persistent visitor ID + chat ID ─────────────────────── *
+     * Use localStorage (not sessionStorage) so identity and chat
+     * survive page reloads.  Keys are scoped to businessId so a
+     * visitor on two different sites using Drexora won't share state. */
+    var VID_KEY = 'drx_vid_' + businessId;
+    var CID_KEY = 'drx_cid_' + businessId;
+
+    state.visitorId = localStorage.getItem(VID_KEY) || null;
+    if (!state.visitorId) {
+      state.visitorId = 'v_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      localStorage.setItem(VID_KEY, state.visitorId);
+    }
+
+    /* Restore previous chat session if one exists */
+    var savedChatId = localStorage.getItem(CID_KEY) || null;
+    if (savedChatId) {
+      state.chatId          = savedChatId;
+      state.historyPending  = true;  // signals tryInitialRender to load history first
+    }
+
+    /* ── Init Firebase ────────────────────────────────────────── */
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    var db = firebase.database();
+
+    /* ── Load business profile (real-time) ───────────────────── *
+     * Uses .on('value') so any settings change saved from the
+     * dashboard is reflected in open widgets immediately —
+     * theme colour, welcome message, title and logo all update
+     * without a page refresh on the host site.                   */
+    db.ref('businesses/' + businessId + '/profile').on('value', function (snap) {
+      if (snap.exists()) {
+        var p = snap.val();
+        state.profile.name           = p.name           || state.profile.name;
+        state.profile.welcomeMessage = p.welcomeMessage || state.profile.welcomeMessage;
+        state.profile.themeColor     = p.themeColor     || state.profile.themeColor;
+        state.profile.chatTitle      = p.chatTitle      || '';
+        state.profile.logoUrl        = p.logoUrl        || '';
+      }
+      if (!state.profileReady) {
+        /* First snapshot — coordinate with FAQ loader */
+        state.profileReady = true;
+        tryInitialRender();
+      } else {
+        /* Profile updated after widget is live — re-render so the
+           new colour / title / welcome message shows immediately   */
+        render();
+      }
+    }, function (err) {
+      console.error('[Drexora] Profile load error:', err.code, err.message);
+      if (err.code === 'PERMISSION_DENIED') {
+        state.permissionError = true;
+      }
+      if (!state.profileReady) {
+        state.profileReady = true;
+        tryInitialRender();
+      }
+    });
+
+    /* ── Real-time FAQ listener ───────────────────────────────── *
+     * Uses .on('value') so the widget always has the latest FAQs
+     * without needing a page refresh — new FAQs added in the
+     * dashboard are reflected instantly in open widgets.           */
+    db.ref('businesses/' + businessId + '/faqs').on('value', function (snap) {
+      state.faqs = [];
+      if (snap.exists()) {
+        snap.forEach(function (child) {
+          var faq = child.val();
+          if (faq.question && faq.answer) {
+            state.faqs.push({ question: faq.question, answer: faq.answer });
+          }
+        });
+      }
+      if (!state.faqsReady) {
+        /* First snapshot — coordinate with profile loader */
+        state.faqsReady = true;
+        tryInitialRender();
+      } else {
+        /* FAQ list changed after widget is live — re-render so the
+           chips (quick-reply buttons) update immediately. Only
+           re-render if no conversation is in progress so we don't
+           interrupt the visitor mid-chat.                          */
+        if (state.open && !state.messages.length) render();
+      }
+    }, function (err) {
+      console.error('[Drexora] FAQ load error:', err.code, err.message);
+      if (err.code === 'PERMISSION_DENIED') {
+        state.permissionError = true;
+      }
+      if (!state.faqsReady) {
+        state.faqsReady = true;
+        tryInitialRender();
+      }
+    });
+
+    /* ── Coordinate initial render ────────────────────────────── *
+     * Wait for both profile and FAQs to arrive before showing the
+     * widget for the first time, so the visitor always sees the
+     * correct branding and never a flash of default values.
+     * If a previous chat session exists, restore its history from
+     * Firebase before marking loading as done.                     */
+    function tryInitialRender() {
+      if (!state.profileReady || !state.faqsReady) return;
+
+      if (state.historyPending) {
+        /* Load existing messages then finish init */
+        restoreChat(state.chatId, function () {
+          state.historyPending = false;
+          state.loading = false;
+          render();
+        });
+      } else {
+        state.loading = false;
+        render();
+      }
+    }
+
+    /* ── Restore a previous chat from Firebase ────────────────── *
+     * Called once on load when localStorage has a chatId.
+     * Fetches all messages with .once() so we get the full history,
+     * then starts the real-time listener for new agent replies.    */
+    function restoreChat(chatId, done) {
+      db.ref('businesses/' + businessId + '/chats/' + chatId + '/messages')
+        .once('value', function (snap) {
+          if (!snap.exists()) {
+            /* Chat was deleted on the server — clear stale local state */
+            localStorage.removeItem(CID_KEY);
+            state.chatId = null;
+            done();
+            return;
+          }
+
+          var msgs = [];
+          snap.forEach(function (child) {
+            var msg = child.val();
+            if (!msg || !msg.text) return;
+            msgs.push({ role: msg.role || 'bot', text: msg.text, id: ++state.msgCounter });
+            /* Pre-register agent message keys so the listener won't re-add them */
+            if (msg.role === 'agent') state.agentMsgKeys[child.key] = true;
+          });
+
+          state.messages     = msgs;
+          state.leadCaptured = true;  // don't re-show the lead form on restore
+
+          /* Start real-time listener for new agent replies */
+          startListeningForAgentMessages();
+          done();
+        }, function (/* err */) {
+          /* Permission error or network failure — treat as no history */
+          done();
+        });
+    }
+
+    /* ── Clear conversation (user-initiated) ─────────────────── */
+    function clearConversation() {
+      localStorage.removeItem(CID_KEY);
+      /* Stop the current chat listener */
+      if (state.chatId) {
+        try {
+          db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages').off();
+        } catch (e) { /* silent */ }
+      }
+      state.chatId        = null;
+      state.chatListening = false;
+      state.messages      = [];
+      state.agentMsgKeys  = {};
+      state.showLeadForm  = false;
+      state.leadCaptured  = false;
+      state.msgCounter    = 0;
+      render();
+    }
+
+    /* ── Render ───────────────────────────────────────────────── */
+    var root = document.getElementById('app');
+
+    function render() {
+      var c = state.profile.themeColor || '#7c3aed';
+      document.documentElement.style.setProperty('--primary',   c);
+      document.documentElement.style.setProperty('--primary-l', lighten(c));
+
+      if (!state.open) {
+        root.innerHTML = launcherHtml();
+        document.getElementById('btn-launcher').onclick = openWidget;
+        notify(false);
+        return;
+      }
+
+      notify(true);
+      root.innerHTML = panelHtml();
+
+      document.getElementById('btn-close').onclick = closeWidget;
+
+      /* Wire chat input — always active, never disabled */
+      var chatInput = document.getElementById('chat-input');
+      var sendBtn   = document.getElementById('btn-send');
+      if (chatInput && sendBtn) {
+        sendBtn.onclick        = function () { sendMessage(chatInput.value); };
+        chatInput.onkeydown    = function (e) {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(chatInput.value); }
+        };
+        /* Re-focus input so mobile keyboard stays up after render */
+        if (document.activeElement && document.activeElement.id === 'chat-input') {
+          chatInput.focus();
+        }
+      }
+
+      /* Quick-reply chips */
+      document.querySelectorAll('[data-chip]').forEach(function (btn) {
+        btn.onclick = function () { sendMessage(btn.getAttribute('data-chip')); };
+      });
+
+      /* Lead form */
+      var leadForm = document.getElementById('lead-form');
+      if (leadForm) leadForm.onsubmit = submitLead;
+
+      /* New conversation button */
+      var newChatBtn = document.getElementById('btn-new-chat');
+      if (newChatBtn) newChatBtn.onclick = function () {
+        if (confirm('Start a new conversation? Your current chat history will be cleared.')) {
+          clearConversation();
+        }
+      };
+
+      /* Scroll to bottom */
+      var msgArea = document.getElementById('msg-area');
+      if (msgArea) msgArea.scrollTop = msgArea.scrollHeight;
+    }
+
+    /* ── Launcher HTML ────────────────────────────────────────── */
+    function launcherHtml() {
+      return '<button id="btn-launcher" class="launcher" aria-label="Open support chat">💬</button>';
+    }
+
+    /* ── Panel HTML ───────────────────────────────────────────── */
+    function panelHtml() {
+      var title  = esc(state.profile.chatTitle || state.profile.name || 'Support');
+      var logoEl = state.profile.logoUrl
+        ? '<div class="logo-wrap"><img src="' + esc(state.profile.logoUrl) + '" alt="logo"></div>'
+        : '<div class="logo-wrap">' + esc((state.profile.name || 'S').slice(0, 2).toUpperCase()) + '</div>';
+
+      /* If Firebase rules block anonymous reads, show a clear
+         configuration-needed message instead of defaults.          */
+      if (state.permissionError) {
+        return '<div class="panel">' +
+          '<div class="panel-header">' + logoEl +
+          '<div class="header-text">' +
+          '<div class="header-title">Widget Setup Required</div>' +
+          '<div class="header-status">⚠️ Configuration needed</div>' +
+          '</div>' +
+          '<button id="btn-close" class="header-close" aria-label="Close">×</button>' +
+          '</div>' +
+          '<div class="messages" id="msg-area" style="align-items:center;justify-content:center;text-align:center;padding:24px 20px">' +
+          '<div style="font-size:28px;margin-bottom:10px">🔒</div>' +
+          '<div style="font-weight:700;font-size:.95rem;margin-bottom:8px;color:var(--ink)">Firebase Rules Need Updating</div>' +
+          '<div style="font-size:.8rem;color:#6b7280;line-height:1.6">' +
+          'The widget cannot load your data because your Firebase Realtime Database rules block public access.<br><br>' +
+          'Go to your <strong>Firebase Console → Realtime Database → Rules</strong> and update them. ' +
+          'Your dashboard has the exact rules to paste.' +
+          '</div>' +
+          '</div>' +
+          '<div class="panel-footer">Powered by <a href="https://daviddchucks-hash.github.io/drexorasupport/" target="_blank">Drexora Support</a></div>' +
+          '</div>' +
+          '<button id="btn-launcher" class="launcher" style="margin-top:10px" aria-label="Close support chat">×</button>';
+      }
+
+      var msgsHtml = state.loading
+        ? '<div class="typing"><span></span><span></span><span></span></div>'
+        : state.messages.map(function (m) {
+            if (m.role === 'agent') {
+              return '<div class="bubble agent">' + esc(m.text) + '</div>';
+            }
+            return '<div class="bubble ' + m.role + '">' + esc(m.text) + '</div>';
+          }).join('');
+
+      var welcomeHtml = '<div class="bubble bot">' + esc(state.profile.welcomeMessage) + '</div>';
+
+      /* Chips only on empty conversation — use real FAQ questions
+         from the database so visitors see the actual topics
+         the business has configured. Fall back to generic presets
+         only if no FAQs have been added yet.                      */
+      var chipsHtml = '';
+      if (!state.messages.length && !state.loading) {
+        var chipItems = state.faqs.length > 0
+          ? state.faqs.slice(0, 5).map(function (f) { return f.question; })
+          : ['How can you help me?', 'What are your prices?', 'I have an issue'];
+        chipsHtml = '<div class="chips">' +
+          chipItems.map(function (p) {
+            return '<button class="chip" data-chip="' + esc(p) + '">' + esc(p) + '</button>';
+          }).join('') + '</div>';
+      }
+
+      /* Input area:
+         - Show lead form if needed and not yet captured
+         - Otherwise ALWAYS show an active chat input (never disabled) */
+      var inputHtml;
+      if (state.showLeadForm && !state.leadCaptured) {
+        inputHtml =
+          '<form id="lead-form" class="lead-form">' +
+          '<p class="lead-form-title">Leave your details and we\'ll be in touch:</p>' +
+          '<input class="lead-input" name="visitorName" required placeholder="Your name">' +
+          '<input class="lead-input" name="email" type="email" required placeholder="Email address">' +
+          '<input class="lead-input" name="phone" placeholder="Phone number (optional)">' +
+          '<button type="submit" class="lead-submit">Send my details →</button>' +
+          '</form>';
+      } else {
+        /* Input is ALWAYS enabled — visitors can keep chatting */
+        inputHtml =
+          '<div class="input-row">' +
+          '<input id="chat-input" class="chat-input" type="text" placeholder="Type a message…" autocomplete="off">' +
+          '<button id="btn-send" class="send-btn" aria-label="Send">➤</button>' +
+          '</div>';
+      }
+
+      return '<div class="panel">' +
+        '<div class="panel-header">' + logoEl +
+        '<div class="header-text">' +
+        '<div class="header-title">' + title + '</div>' +
+        '<div class="header-status">✅ Online · Usually replies instantly</div>' +
+        '</div>' +
+        '<button id="btn-close" class="header-close" aria-label="Close">×</button>' +
+        '</div>' +
+        '<div class="messages" id="msg-area">' + welcomeHtml + msgsHtml + '</div>' +
+        chipsHtml + inputHtml +
+        '<div class="panel-footer">Powered by <a href="https://daviddchucks-hash.github.io/drexorasupport/" target="_blank">Drexora Support</a>' +
+        (state.messages.length ? ' &nbsp;·&nbsp; <button id="btn-new-chat" class="footer-new-chat">New conversation</button>' : '') +
+        '</div>' +
+        '</div>' +
+        '<button id="btn-launcher" class="launcher" style="margin-top:10px" aria-label="Close support chat">×</button>';
+    }
+
+    /* ── FAQ matching ─────────────────────────────────────────── *
+     * Bidirectional keyword search:
+     *   1. Do words from the FAQ question appear in the visitor's message?
+     *   2. Do words from the visitor's message appear in the FAQ question?
+     * Uses words of 3+ characters so short stop-words don't fire.
+     * Returns the FAQ with the highest combined score, or null.      */
+    function findFaqMatch(text) {
+      if (!state.faqs.length) return null;
+
+      var STOP = { 'the':1,'and':1,'for':1,'are':1,'but':1,'not':1,'you':1,'all':1,'can':1,'her':1,'was':1,'one':1,'our':1,'out':1,'had':1,'has':1,'his':1,'how':1,'its':1,'may':1,'new':1,'now':1,'old':1,'see':1,'two':1,'way':1,'who':1,'did':1,'get':1,'use':1,'has':1,'him':1,'let':1,'put':1,'too':1,'why':1,'did':1,'got':1 };
+
+      function keywords(str) {
+        return str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(function (w) {
+          return w.length >= 3 && !STOP[w];
+        });
+      }
+
+      var userWords = keywords(text);
+      if (!userWords.length) return null;
+
+      var best = null, bestScore = 0;
+
+      for (var i = 0; i < state.faqs.length; i++) {
+        var qWords = keywords(state.faqs[i].question || '');
+        var aWords = keywords(state.faqs[i].answer   || '');
+        var score  = 0;
+
+        /* How many FAQ question words appear in the user message? */
+        qWords.forEach(function (w) { if (text.toLowerCase().includes(w)) score += 2; });
+
+        /* How many user words appear in the FAQ question? */
+        userWords.forEach(function (w) {
+          if ((state.faqs[i].question || '').toLowerCase().includes(w)) score += 2;
+        });
+
+        /* Bonus: user words appearing in the answer too */
+        userWords.forEach(function (w) {
+          if ((state.faqs[i].answer || '').toLowerCase().includes(w)) score += 1;
+        });
+
+        if (score > 0 && score > bestScore) {
+          bestScore = score;
+          best = state.faqs[i];
+        }
+      }
+
+      /* Require at least a score of 2 to avoid very weak matches */
+      return bestScore >= 2 ? best : null;
+    }
+
+    /* ── Send a message ───────────────────────────────────────── */
+    function sendMessage(text) {
+      text = (text || '').trim();
+      if (!text) return;
+
+      /* Clear input immediately */
+      var inputEl = document.getElementById('chat-input');
+      if (inputEl) inputEl.value = '';
+
+      state.messages.push({ role: 'user', text: text, id: ++state.msgCounter });
+      state.messages.push({ role: 'bot',  text: '…', id: ++state.msgCounter, typing: true });
+      render();
+
+      setTimeout(function () {
+        state.messages = state.messages.filter(function (m) { return !m.typing; });
+
+        var match = findFaqMatch(text);
+
+        if (match) {
+          state.messages.push({ role: 'bot', text: match.answer, id: ++state.msgCounter });
+          saveChat(text, match.answer);
+          state.showLeadForm = false;
+        } else if (!state.leadCaptured) {
+          /* No match and we don't have their details yet — ask for them */
+          state.messages.push({
+            role: 'bot',
+            text: "I couldn't find a direct answer to that. Please share your name, email and phone number below and our team will contact you shortly.",
+            id: ++state.msgCounter
+          });
+          state.showLeadForm = true;
+          saveChat(text, "Couldn't find a FAQ match.");
+        } else {
+          /* We already have their details — just acknowledge */
+          state.messages.push({
+            role: 'bot',
+            text: "Thanks for reaching out! Our team already has your details and will follow up with you soon.",
+            id: ++state.msgCounter
+          });
+          saveChat(text, "Team follow-up needed.");
+        }
+
+        render();
+      }, 900);
+    }
+
+    /* ── Save chat to Realtime DB ─────────────────────────────── */
+    function saveChat(userMsg, botMsg) {
+      try {
+        if (!state.chatId) {
+          var chatRef = db.ref('businesses/' + businessId + '/chats').push();
+          state.chatId = chatRef.key;
+          /* Persist so the conversation survives a page reload */
+          localStorage.setItem(CID_KEY, state.chatId);
+          chatRef.set({
+            visitorId: state.visitorId,
+            createdAt: firebase.database.ServerValue.TIMESTAMP,
+            status:    'open'
+          });
+          /* Start listening for agent replies as soon as a chat exists */
+          startListeningForAgentMessages();
+        }
+        var msgsRef = db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages');
+        msgsRef.push({ role: 'user', text: userMsg, timestamp: firebase.database.ServerValue.TIMESTAMP });
+        msgsRef.push({ role: 'bot',  text: botMsg,  timestamp: firebase.database.ServerValue.TIMESTAMP });
+      } catch (e) { /* silent */ }
+    }
+
+    /* ── Listen for agent messages in real-time ───────────────── *
+     * Once a chat session exists, subscribe to child_added on its
+     * messages node.  We only act on messages with role === 'agent'
+     * (sent from the control panel) that we haven't shown yet.
+     * User and bot messages are already managed by local state, so
+     * we skip them to avoid duplicates.                            */
+    function startListeningForAgentMessages() {
+      if (state.chatListening || !state.chatId) return;
+      state.chatListening = true;
+
+      db.ref('businesses/' + businessId + '/chats/' + state.chatId + '/messages')
+        .on('child_added', function (snap) {
+          var msg = snap.val();
+          var key = snap.key;
+          /* Only process agent messages we haven't shown yet */
+          if (!msg || msg.role !== 'agent') return;
+          if (state.agentMsgKeys[key]) return;
+          state.agentMsgKeys[key] = true;
+
+          state.messages.push({ role: 'agent', text: msg.text || '', id: ++state.msgCounter });
+          /* Re-render only when widget is open so we don't force-open it */
+          if (state.open) render();
+        });
+    }
+
+    /* ── Submit lead form ─────────────────────────────────────── */
+    function submitLead(e) {
+      e.preventDefault();
+      var form        = e.target;
+      var visitorName = (form.visitorName.value || '').trim();
+      var email       = (form.email.value       || '').trim();
+      var phone       = (form.phone.value        || '').trim();
+      if (!visitorName || !email) return;
+
+      var lastUserMsg = '';
+      for (var i = state.messages.length - 1; i >= 0; i--) {
+        if (state.messages[i].role === 'user') { lastUserMsg = state.messages[i].text; break; }
+      }
+
+      try {
+        db.ref('businesses/' + businessId + '/leads').push({
+          visitorName: visitorName,
+          email:       email,
+          phone:       phone,
+          message:     lastUserMsg,
+          visitorId:   state.visitorId,
+          read:        false,
+          source:      'widget',
+          createdAt:   firebase.database.ServerValue.TIMESTAMP
+        });
+      } catch (err) { /* silent */ }
+
+      /* Mark captured — hides the form but NEVER disables the input */
+      state.showLeadForm = false;
+      state.leadCaptured = true;
+
+      state.messages.push({
+        role: 'bot',
+        text: 'Thanks, ' + esc(visitorName) + '! Your details have been received. Our team will be in touch shortly. Feel free to keep chatting!',
+        id: ++state.msgCounter
+      });
+      render();
+    }
+
+    /* ── Open / close ─────────────────────────────────────────── */
+    function openWidget()  { state.open = true;  render(); }
+    function closeWidget() { state.open = false; render(); }
+    window.closeWidget = closeWidget;
+
+    /* ── postMessage height to parent ────────────────────────── */
+    function notify(open) {
+      try { window.parent.postMessage({ type: 'drexora-resize', open: open }, '*'); } catch (e) {}
+    }
+
+    /* ── Helpers ──────────────────────────────────────────────── */
+    function esc(str) {
+      return String(str || '').replace(/[&<>"']/g, function (c) {
+        return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' })[c];
+      });
+    }
+
+    function lighten(hex) {
+      try {
+        var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+        r = Math.min(255,r+60); g = Math.min(255,g+60); b = Math.min(255,b+60);
+        return '#' + [r,g,b].map(function(v){return v.toString(16).padStart(2,'0');}).join('');
+      } catch(e) { return '#a78bfa'; }
+    }
+
+    /* ── Initial render ──────────────────────────────────────── *
+     * Show the launcher button immediately (before data loads)
+     * so there's no visible delay for the visitor. The full
+     * panel will use real profile/FAQ data once both load.        */
+    render();
+
+  }());
+  </script>
+</body>
+</html>

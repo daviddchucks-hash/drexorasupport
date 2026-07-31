@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waiting for Invitation — Drexora Support</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css?v=4">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <script>
+    (function(){if(localStorage.getItem('drexora-theme')==='dark')document.documentElement.classList.add('dark-mode');})();
+  </script>
+  <style>
+    .waiting-card {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 48px 40px;
+      text-align: center;
+    }
+    .waiting-icon {
+      font-size: 4rem;
+      margin-bottom: 20px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%       { transform: scale(1.08); opacity: .75; }
+    }
+    .waiting-title {
+      font-size: 1.4rem;
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+    .waiting-desc {
+      font-size: .9rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      margin-bottom: 28px;
+    }
+    .waiting-email-pill {
+      display: inline-block;
+      background: rgba(201,162,39,.12);
+      border: 1px solid rgba(201,162,39,.3);
+      color: var(--primary);
+      font-size: .83rem;
+      font-weight: 600;
+      padding: 6px 16px;
+      border-radius: 99px;
+      margin-bottom: 28px;
+    }
+    .waiting-steps {
+      background: var(--glass-bg, rgba(255,255,255,.04));
+      border: 1px solid var(--border, rgba(255,255,255,.1));
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 28px;
+      text-align: left;
+    }
+    .waiting-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border, rgba(255,255,255,.08));
+      font-size: .85rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+    .waiting-step:last-child { border-bottom: none; }
+    .step-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--primary, #C9A227);
+      color: #fff;
+      font-size: .7rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .checking-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .75rem;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+    .checking-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      animation: blink 1.2s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .2; }
+    }
+  </style>
+</head>
+<body class="landing-body">
+  <div class="page-bg"></div>
+
+  <div class="auth-page">
+    <div class="auth-card waiting-card animate-fadeUp">
+
+      <div class="auth-logo">
+        <img src="images/logo.png" alt="Drexora" class="auth-logo-img">
+        <span class="auth-logo-text">Drexora <strong>Support</strong></span>
+      </div>
+
+      <div class="waiting-icon">📬</div>
+      <div class="waiting-title">Waiting for your invitation</div>
+      <div class="waiting-desc">
+        Your account is ready! You'll be automatically added to your company's workspace the moment an admin sends you an invitation.
+      </div>
+
+      <div class="waiting-email-pill" id="user-email-pill">Loading…</div>
+
+      <div class="checking-badge">
+        <span class="checking-dot"></span>
+        Checking for invitation…
+      </div>
+
+      <div class="waiting-steps">
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px">What happens next</div>
+        <div class="waiting-step">
+          <div class="step-num">1</div>
+          <div>Share the email address above with your company admin.</div>
+        </div>
+        <div class="waiting-step">
+          <div class="step-num">2</div>
+          <div>The admin invites you from their <strong>Team</strong> page in Drexora Support.</div>
+        </div>
+        <div class="waiting-step">
+          <div class="step-num">3</div>
+          <div>Log out and log back in — you'll be taken straight to your workspace dashboard.</div>
+        </div>
+      </div>
+
+      <button class="btn btn-ghost btn-block" id="signout-btn" style="margin-bottom:12px">
+        Sign Out
+      </button>
+      <div style="font-size:.75rem;color:var(--text-muted)">
+        Already invited? <a href="login.html" style="color:var(--primary-light)">Sign in again</a> to pick it up automatically.
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/theme.js"></script>
+  <script>
+    firebase.auth().onAuthStateChanged(async function(user) {
+      if (!user) { window.location.href = 'login.html'; return; }
+
+      // Show user's email
+      const pill = document.getElementById('user-email-pill');
+      if (pill) pill.textContent = user.email;
+
+      const db = firebase.database();
+
+      // 1. Check if a pending invitation was already sent to this email
+      const encodedEmail = user.email.replace(/\./g, ',');
+      const invSnap = await db.ref('pendingInvitations/' + encodedEmail).once('value');
+      if (invSnap.val()) {
+        // Invitation found — redirect to dashboard where app.js will accept it
+        window.location.href = 'dashboard.html';
+        return;
+      }
+
+      // 2. Check if workspace has been linked (invited while on this page)
+      const wsSnap = await db.ref('userWorkspace/' + user.uid).once('value');
+      const ws = wsSnap.val();
+      if (ws && ws.businessUid) {
+        window.location.href = 'dashboard.html';
+        return;
+      }
+
+      // 3. Poll every 10 s for invitation or businessUid update
+      const poll = setInterval(async () => {
+        try {
+          const iSnap = await db.ref('pendingInvitations/' + encodedEmail).once('value');
+          if (iSnap.val()) { clearInterval(poll); window.location.href = 'dashboard.html'; return; }
+
+          const wSnap = await db.ref('userWorkspace/' + user.uid + '/businessUid').once('value');
+          if (wSnap.val()) { clearInterval(poll); window.location.href = 'dashboard.html'; }
+        } catch (e) { /* non-fatal */ }
+      }, 10000);
+
+      // Sign-out button
+      document.getElementById('signout-btn')?.addEventListener('click', async () => {
+        clearInterval(poll);
+        await firebase.auth().signOut();
+        window.location.href = 'login.html';
+      });
+    });
+  </script>
+</body>
+</html>
