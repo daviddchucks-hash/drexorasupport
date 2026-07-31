@@ -1,0 +1,45 @@
+##############################################################
+# render.yaml — Render deployment blueprint
+# Docs: https://render.com/docs/blueprint-spec
+##############################################################
+
+services:
+  - type: web
+    name: drexora-support-backend
+    runtime: node
+    region: oregon
+    plan: free
+
+    buildCommand: npm install
+    startCommand: node src/server.js
+
+    # Render pings this path to confirm the service is alive
+    healthCheckPath: /
+
+    # Auto-deploy on every push to main
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      - key: PORT
+        value: "5000"
+
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "900000"
+
+      - key: RATE_LIMIT_MAX
+        value: "100"
