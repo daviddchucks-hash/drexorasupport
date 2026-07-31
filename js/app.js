@@ -4,6 +4,8 @@
  * toast notifications, activity logging, and notification helpers.
  */
 
+import { backendLogout, markPresenceOnline, markPresenceOffline } from './api.js';
+
 /* ══════════════════════════════════════════════════════════════
    WORKSPACE CONTEXT — resolve the business (workspace) UID
    for any authenticated user (owner OR teammate)
@@ -298,13 +300,22 @@ export function setupSidebar(user) {
   document.querySelectorAll('[data-logout], #logout-btn, .logout-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       clearWorkspaceCache();
-      // Update presence to offline
-      const db = firebase.database();
-      const wid = _workspaceUid;
-      const uid = user.uid;
-      if (wid && uid) {
-        await db.ref(`businesses/${wid}/team/members/${uid}/status`).set('offline')
-          .catch(() => {});
+      // Update presence to offline in Firebase RTDB and via backend
+      try {
+        const db  = firebase.database();
+        const wid = _workspaceUid;
+        const uid = user.uid;
+        if (wid && uid) {
+          await db.ref(`businesses/${wid}/team/members/${uid}/status`).set('offline')
+            .catch(() => {});
+        }
+        // Revoke server-side Firebase tokens so all sessions are invalidated
+        await backendLogout();
+        // Also mark presence offline on the backend
+        await markPresenceOffline();
+      } catch (e) {
+        // Non-fatal — always sign out even if backend calls fail
+        console.warn('[app.js] logout backend calls failed:', e.message);
       }
       await firebase.auth().signOut();
       window.location.href = 'login.html';
@@ -498,9 +509,12 @@ async function _updatePresence(user) {
 
     await ref.update({ status: 'online', lastActive: Date.now() });
 
-    // Set to offline on disconnect
+    // Set to offline on disconnect (Firebase RTDB native hook)
     ref.child('status').onDisconnect().set('offline');
     ref.child('lastActive').onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
+
+    // Also mark online via the Render backend (updates backend-side presence)
+    markPresenceOnline().catch(() => {}); // fire-and-forget
   } catch (e) { /* non-fatal */ }
 }
 

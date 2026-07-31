@@ -1,7 +1,11 @@
 /**
  * login.js — ES6 Module
  * Handles business login with Firebase Email/Password auth.
+ * After sign-in, also calls the Render backend to sync the session
+ * and get the enriched server-side user profile.
  */
+
+import { backendLogin } from './api.js';
 
 /* ── DOM refs ─────────────────────────────────────────────── */
 const form      = document.getElementById('login-form');
@@ -34,7 +38,14 @@ form.addEventListener('submit', async function (e) {
   setLoading(true);
 
   try {
-    await firebase.auth().signInWithEmailAndPassword(email, password);
+    const cred  = await firebase.auth().signInWithEmailAndPassword(email, password);
+    // Sync session with the Render backend (non-blocking — don't let failure block login)
+    try {
+      const idToken = await cred.user.getIdToken();
+      await backendLogin(idToken);
+    } catch (backendErr) {
+      console.warn('[login.js] Backend sync failed (non-fatal):', backendErr.message);
+    }
     window.location.href = 'dashboard.html';
   } catch (err) {
     setLoading(false);

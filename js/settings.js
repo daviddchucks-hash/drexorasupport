@@ -8,6 +8,7 @@ import {
   requireAuth, setupSidebar, toast, escHtml, copyToClipboard,
   getWorkspaceUid, getCurrentUserRole, getUserRecord
 } from './app.js';
+import { updateUserProfile } from './api.js';
 
 let currentUser  = null;
 let workspaceUid = null;
@@ -177,8 +178,17 @@ async function saveProfile(e) {
       if (url) logoUrl = url;
     }
 
+    // 1. Write business profile to Firebase RTDB (source of truth for workspace data)
     await db.ref(`businesses/${workspaceUid}/profile`).update({ name, welcomeMessage: welcome, themeColor: color, chatTitle: title, logoUrl });
     profile = { ...profile, name, welcomeMessage: welcome, themeColor: color, chatTitle: title, logoUrl };
+
+    // 2. Sync display name to Firebase Auth via the Render backend (non-blocking)
+    if (currentUser && name) {
+      updateUserProfile(currentUser.uid, { displayName: name }).catch(e => {
+        console.warn('[settings.js] Backend profile sync failed (non-fatal):', e.message);
+      });
+    }
+
     toast('Settings saved.', 'success');
   } catch { toast('Failed to save settings.', 'error'); }
   finally  {
