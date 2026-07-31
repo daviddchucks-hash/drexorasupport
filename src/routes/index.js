@@ -11,6 +11,7 @@ const express      = require('express');
 const authRoutes   = require('./auth.routes');
 const userRoutes   = require('./user.routes');
 const ticketRoutes = require('./ticket.routes');
+const rtdbRoutes   = require('./rtdb.routes');
 
 const router = express.Router();
 
@@ -33,6 +34,7 @@ router.get('/', (req, res) => {
 router.use('/api/v1/auth',    authRoutes);
 router.use('/api/v1/users',   userRoutes);
 router.use('/api/v1/tickets', ticketRoutes);
+router.use('/api/v1/rtdb',    rtdbRoutes);
 
 // ── 404 catch-all ─────────────────────────────────────────────────────────
 router.use((req, res) => {
